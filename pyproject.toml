@@ -1,0 +1,23 @@
+[project]
+name = "hermes"
+version = "0.1.0"
+description = "Gluvok Weighbridge ANPR & Camera Integration Controller"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.34.2",
+    "pyserial>=3.5",
+    "opencv-python>=5.0.0.93",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.6",
+    "ty>=0.0.79",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
