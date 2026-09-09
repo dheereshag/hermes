@@ -1,4 +1,4 @@
-from .server import (
+from src.web.server import (
     FallbackWebServer,
     record_system_event,
     start_web_server,

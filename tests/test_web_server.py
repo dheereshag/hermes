@@ -16,6 +16,17 @@ class TestFallbackWebServer(unittest.TestCase):
         cls.server = FallbackWebServer(host="127.0.0.1", port=cls.test_port)
         cls.server.start()
         time.sleep(0.3)  # Allow socket to bind
+        login_url = f"http://127.0.0.1:{cls.test_port}/api/login"
+        login_payload = json.dumps(
+            {"userid": "superadmin", "password": "Gluvok@241821"}
+        ).encode("utf-8")
+        login_request = urllib.request.Request(
+            login_url,
+            data=login_payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(login_request, timeout=3.0) as response:
+            cls.auth_token = json.loads(response.read().decode("utf-8"))["token"]
 
     @classmethod
     def tearDownClass(cls):
@@ -58,7 +69,14 @@ class TestFallbackWebServer(unittest.TestCase):
     def test_post_api_wifi_success(self):
         url = f"http://127.0.0.1:{self.test_port}/api/wifi"
         payload = json.dumps({"ssid": "TestRouter_5G", "password": "SecretPassword123"}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-Auth-Token": self.auth_token,
+            },
+        )
 
         with urllib.request.urlopen(req, timeout=3.0) as res:
             self.assertEqual(res.status, 200)
@@ -71,7 +89,14 @@ class TestFallbackWebServer(unittest.TestCase):
     def test_post_api_wifi_empty_ssid_error(self):
         url = f"http://127.0.0.1:{self.test_port}/api/wifi"
         payload = json.dumps({"ssid": "", "password": "password"}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-Auth-Token": self.auth_token,
+            },
+        )
 
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             urllib.request.urlopen(req, timeout=3.0)
@@ -79,7 +104,14 @@ class TestFallbackWebServer(unittest.TestCase):
 
     def test_post_api_wifi_clear(self):
         url = f"http://127.0.0.1:{self.test_port}/api/wifi/clear"
-        req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            url,
+            data=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "X-Auth-Token": self.auth_token,
+            },
+        )
 
         with urllib.request.urlopen(req, timeout=3.0) as res:
             self.assertEqual(res.status, 200)

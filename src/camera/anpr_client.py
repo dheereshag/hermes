@@ -7,8 +7,8 @@ from collections.abc import Sequence
 
 import requests
 
-from ..config.camera_config import ANPR_SERVER_TIMEOUT, ANPR_SERVER_URL
-from ..config.config_manager import config
+from src.config.camera_config import ANPR_SERVER_TIMEOUT, ANPR_SERVER_URL
+from src.config.config_manager import config
 
 logger = logging.getLogger(__name__)
 

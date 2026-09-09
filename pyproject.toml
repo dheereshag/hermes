@@ -3,7 +3,7 @@ name = "hermes"
 version = "0.1.0"
 description = "Gluvok Weighbridge ANPR & Camera Integration Controller"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "requests>=2.34.2",
     "pyserial>=3.5",

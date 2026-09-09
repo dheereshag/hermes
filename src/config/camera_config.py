@@ -5,7 +5,8 @@ Uses dynamic property/getter evaluation so changes made via the System Config we
 take effect immediately on the next capture cycle without requiring a process restart.
 """
 
-from ..config.config_manager import config
+from src.config.config_manager import config
+
 
 def get_anpr_camera_url() -> str:
     """Returns current ANPR camera URL from persistent config."""

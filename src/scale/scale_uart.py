@@ -15,7 +15,7 @@ import time
 
 import serial
 
-from ..config.config_manager import config as app_config
+from src.config.config_manager import config as app_config
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class ScaleUARTReader:
                 if self._serial:
                     try:
                         self._serial.close()
-                    except Exception:
+                    except OSError, serial.SerialException:
                         pass
                     self._serial = None
                 time.sleep(1.0)
@@ -212,7 +212,7 @@ def handle_scale_char(c):
 def handle_scale_char_processed(weight: float):
     """Bridge to stability state machine — called after a weight value is extracted."""
     logger.info(f"[Scale] Parsed weight: {weight:.3f} kg")
-    from ..scale.scale_stability import process_new_weight
+    from src.scale.scale_stability import process_new_weight
     process_new_weight(weight)
 
 def get_uart_reader() -> ScaleUARTReader:

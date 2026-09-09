@@ -12,10 +12,9 @@ from typing import Any
 
 import requests
 
-from ..config.camera_config import ANPR_SERVER_URL
-from ..config.config_manager import config
-from ..network.supabase_client import auth_state
-from ..scale.scale_stability import get_current_weight, get_scale_state
+from src.config.config_manager import config
+from src.network.supabase_client import auth_state
+from src.scale.scale_stability import get_current_weight, get_scale_state
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +270,7 @@ class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
             self._send_json_response({"success": False, "error": f"Invalid payload: {e}"}, 400)
 
     def _handle_get_status(self):
-        from ..camera.anpr_client import resolve_anpr_endpoint
+        from src.camera.anpr_client import resolve_anpr_endpoint
         target_argus_url = resolve_anpr_endpoint(config.anpr_server_url)
         argus_health_url = target_argus_url.replace("/recognize", "/health")
         argus_online = False
@@ -284,7 +283,7 @@ class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
         with _events_lock:
             events_copy = list(_system_events)
 
-        from ..network.wifi_manager import is_hotspot_active, is_wifi_connected
+        from src.network.wifi_manager import is_hotspot_active, is_wifi_connected
 
         status_data = {
             "status": "healthy",
@@ -342,7 +341,7 @@ class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
             config.update_wifi_credentials(ssid, password)
             record_system_event("CONFIG", f"Saved Wi-Fi SSID '{ssid}' to config.json. Attempting connection...")
 
-            from ..network.wifi_manager import connect_to_wifi
+            from src.network.wifi_manager import connect_to_wifi
             connected, msg = connect_to_wifi(ssid, password)
 
             if connected:
@@ -461,10 +460,10 @@ class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
             # Trigger live UART reader re-initialization if serial port or baud rate changed
             if (serial_port and serial_port != old_port) or (serial_baudrate and serial_baudrate != old_baud):
                 try:
-                    from ..scale.scale_uart import get_uart_reader
+                    from src.scale.scale_uart import get_uart_reader
                     get_uart_reader().restart(config.serial_port, config.serial_baudrate)
                     record_system_event("SCALE", f"Re-opened UART serial port {config.serial_port} @ {config.serial_baudrate} baud.")
-                except Exception as uart_err:
+                except (AttributeError, OSError, RuntimeError) as uart_err:
                     logger.error(f"[Config] Error restarting UART reader: {uart_err}")
 
             record_system_event("CONFIG", "System configuration updated via web interface.")

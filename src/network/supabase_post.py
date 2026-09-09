@@ -5,9 +5,9 @@ from typing import Any
 
 import requests
 
-from ..config.config_manager import config
-from .supabase_auth import ensure_valid_auth, refresh_gluvok_token
-from .supabase_client import GLUVOK_BASE_URL, auth_state
+from src.config.config_manager import config
+from src.network.supabase_auth import ensure_valid_auth, refresh_gluvok_token
+from src.network.supabase_client import GLUVOK_BASE_URL, auth_state
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
     if isinstance(session_payload, dict):
         weight_val = float(session_payload.get("weight", 0.0))
         raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
-        detected_plate, valid_plate = sanitize_vehicle_number(raw_plate)
-        session_id = session_payload.get("session_id", "")
+        detected_plate, _ = sanitize_vehicle_number(raw_plate)
 
         # 1. Primary Camera 1 image (Data URI)
         cam1_bytes = session_payload.get("cam1_final_image")
@@ -107,7 +106,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
             entry_id = res_data.get("data", {}).get("id", "N/A")
             logger.info(f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})")
             try:
-                from ..web.server import record_system_event
+                from src.web.server import record_system_event
                 record_system_event(
                     "CLOUD",
                     f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload['weight']} kg"
@@ -121,7 +120,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
             else:
                 logger.error("[Gluvok API] Token refresh failed on 401 response.")
                 try:
-                    from ..web.server import record_error_event, record_system_event
+                    from src.web.server import record_error_event, record_system_event
                     record_error_event("CLOUD_AUTH_FAILED", "Token refresh failed")
                     record_system_event("CLOUD", "Cloud access token refresh failed.")
                 except (ImportError, AttributeError):
@@ -129,7 +128,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
         else:
             logger.error(f"[Gluvok API] POST /api/entries failed HTTP {response.status_code}: {response.text}")
             try:
-                from ..web.server import record_error_event, record_system_event
+                from src.web.server import record_error_event, record_system_event
                 record_error_event("CLOUD_UPLOAD_ERROR", f"HTTP {response.status_code}")
                 record_system_event("CLOUD", f"Gluvok API entry POST failed: HTTP {response.status_code}")
             except (ImportError, AttributeError):
@@ -137,7 +136,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
     except (requests.RequestException, ValueError, KeyError) as e:
         logger.error(f"[Gluvok API] Network exception during entry transmission: {e}")
         try:
-            from ..web.server import record_error_event, record_system_event
+            from src.web.server import record_error_event, record_system_event
             record_error_event("CLOUD_UPLOAD_ERROR", str(e))
             record_system_event("CLOUD", f"Gluvok API POST exception: {e}")
         except (ImportError, AttributeError):

@@ -75,6 +75,41 @@ For any Python modifications:
 - `uv run ty check` (0 errors, 0 warnings)
 - `uv run pytest` (all tests pass)
 
+## 6. Update Documentation (`docs/` and `README.md`)
+
+**Always keep documentation in `docs/` and `README.md` in sync with codebase changes.**
+
+- Explicitly update `README.md` and relevant guides in `docs/` (such as `docs/ARCHITECTURE.md`) whenever adding, modifying, or removing features, API endpoints, environment variables, architecture patterns, dependencies, or workflows.
+- Ensure all setup instructions, configuration options, usage examples, and architectural diagrams remain accurate and up-to-date.
+
+## 7. Dependency Management via `uv`
+
+**Always use `uv` commands to add or remove dependencies. Never directly edit `pyproject.toml` dependencies.**
+
+- Use `uv add <package>` to install and record new dependencies.
+- Use `uv remove <package>` to uninstall and remove dependencies.
+- Never manually edit the `dependencies` or `dependency-groups` arrays in `pyproject.toml` directly; let `uv` manage dependency specification, lockfile synchronization (`uv.lock`), and virtual environment state.
+
+## 8. No Backward-Compatibility Shims
+
+**Never add or keep backward-compatibility code for obsolete tests or legacy implementations.**
+
+- Do not compromise production code types or signatures to satisfy stale test mocks or old conventions.
+- If a function returns a typed dataclass/model, never add `isinstance(x, dict)` checks, dict subscription shims (`__getitem__`, `get`), or fallback adapters.
+- Update tests and callers to strictly match the current, clean production contracts. Never bend production code backward for tests.
+
+## 9. Function Size Guidelines (20–50 Lines)
+
+**Keep functions focused, single-purpose, and readable.**
+
+- Functions should typically be between **20–50 lines** (varying with complexity).
+- Extract helper functions whenever a function:
+  - Exceeds 20–50 lines.
+  - Serves multiple distinct concerns or lifecycle steps.
+  - Contains deeply nested control flow (3+ indentation levels).
+- **Harmony with Surgical Changes (§3)**: Apply this heuristic when writing new functions or modifying existing ones; do not arbitrarily refactor untouched adjacent code unless working on that specific component.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+

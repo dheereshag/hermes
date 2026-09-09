@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from ..config.camera_config import (
+from src.config.camera_config import (
     AUXILIARY_CAMERA_URLS,
     CAMERA_TIMEOUT,
     MAX_PARALLEL_CAMERA_WORKERS,

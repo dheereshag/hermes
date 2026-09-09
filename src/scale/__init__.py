@@ -1,11 +1,11 @@
-from .scale_stability import (
+from src.scale.scale_stability import (
     ScaleState,
     get_current_weight,
     get_scale_state,
     process_new_weight,
     scale_state_machine,
 )
-from .scale_uart import ScaleUARTReader, handle_scale_char
+from src.scale.scale_uart import ScaleUARTReader, handle_scale_char
 
 __all__ = [
     "ScaleState",

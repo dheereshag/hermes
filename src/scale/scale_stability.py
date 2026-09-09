@@ -9,8 +9,8 @@ import logging
 import time
 from enum import Enum
 
-from ..camera.session_manager import session_manager
-from ..config.config_manager import config
+from src.camera.session_manager import session_manager
+from src.config.config_manager import config
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class ScaleStabilityMachine:
 
     def _trigger_upload(self, session_package: dict):
         # Import here to avoid circular imports
-        from ..network.supabase_post import post_to_supabase
+        from src.network.supabase_post import post_to_supabase
         post_to_supabase(session_package)
 
     def reset(self):

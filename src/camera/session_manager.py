@@ -15,13 +15,16 @@ from typing import Any
 
 import requests
 
-from ..config.camera_config import (
+from src.camera.anpr_client import (
+    get_highest_frequency_plate,
+    send_frame_to_anpr_server,
+)
+from src.camera.camera_manager import capture_auxiliary_snapshots, fetch_image_bytes
+from src.config.camera_config import (
     ANPR_CAMERA_URL,
     ANPR_CAPTURE_INTERVAL,
     POST_STABILITY_DURATION,
 )
-from .anpr_client import get_highest_frequency_plate, send_frame_to_anpr_server
-from .camera_manager import capture_auxiliary_snapshots, fetch_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +190,7 @@ class WeighbridgeSessionManager:
 
             # Bridge to fallback web server live telemetry
             try:
-                from ..web.server import record_system_event, record_weighment_result
+                from src.web.server import record_system_event, record_weighment_result
                 is_err = bool(not self._cam1_plates)
                 record_weighment_result(
                     session_id=str(self.session_id),
