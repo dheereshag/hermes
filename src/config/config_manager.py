@@ -19,9 +19,8 @@ class ConfigManager:
         self.wifi_password = ""
         self.center_id = 1
         self.weight_threshold = 50.0
-        self.api_email = ""
-        self.api_password = ""
-        self.profile_id = -1
+        self.device_id = 1
+        self.device_key = ""
         self.anpr_server_url = ""
         self.serial_port = "/dev/ttyAMA0"
         self.serial_baudrate = 1200
@@ -41,8 +40,8 @@ class ConfigManager:
                 password="",
                 center_id=1,
                 min_weight=50.0,
-                api_email="",
-                api_password="",
+                device_id=1,
+                device_key="",
                 anpr_url="",
             )
             return
@@ -55,9 +54,8 @@ class ConfigManager:
             self.wifi_password = data.get("password", "")
             self.center_id = int(data.get("center_id", 1))
             self.weight_threshold = float(data.get("min_weight", 50.0))
-            self.api_email = data.get("api_email") or data.get("sb_email", "")
-            self.api_password = data.get("api_password") or data.get("sb_pass", "")
-            self.profile_id = int(data.get("profile_id", -1))
+            self.device_id = int(data.get("device_id", 1))
+            self.device_key = str(data.get("device_key", ""))
             self.anpr_server_url = data.get("anpr_server_url", "")
             self.serial_port = data.get("serial_port", "/dev/ttyAMA0")
             self.serial_baudrate = int(data.get("serial_baudrate", 1200))
@@ -72,7 +70,7 @@ class ConfigManager:
 
             logger.info("Configurations loaded from JSON storage:")
             logger.info(f" -> SSID: {self.wifi_ssid}")
-            logger.info(f" -> Operator Email: {self.api_email}")
+            logger.info(f" -> Device ID: {self.device_id}")
             logger.info(f" -> Center ID: {self.center_id}")
             logger.info(f" -> Min Weight Threshold: {self.weight_threshold:.1f}")
             logger.info(f" -> Serial Port: {self.serial_port} @ {self.serial_baudrate} baud")
@@ -90,9 +88,8 @@ class ConfigManager:
             "password": self.wifi_password,
             "center_id": self.center_id,
             "min_weight": self.weight_threshold,
-            "api_email": self.api_email,
-            "api_password": self.api_password,
-            "profile_id": self.profile_id,
+            "device_id": self.device_id,
+            "device_key": self.device_key,
             "anpr_server_url": self.anpr_server_url,
             "serial_port": self.serial_port,
             "serial_baudrate": self.serial_baudrate,
@@ -116,16 +113,16 @@ class ConfigManager:
         password: str,
         center_id: int,
         min_weight: float,
-        api_email: str,
-        api_password: str,
+        device_id: int = 1,
+        device_key: str = "",
         anpr_url: str | None = None,
     ) -> None:
         self.wifi_ssid = ssid
         self.wifi_password = password
         self.center_id = int(center_id)
         self.weight_threshold = float(min_weight)
-        self.api_email = api_email
-        self.api_password = api_password
+        self.device_id = int(device_id)
+        self.device_key = str(device_key)
         if anpr_url is not None:
             self.anpr_server_url = anpr_url
         self._persist()
@@ -155,9 +152,11 @@ class ConfigManager:
         self._persist()
         logger.info("[Config] System configuration updated via web interface.")
 
-    def update_profile_id(self, profile_id: int) -> None:
-        self.profile_id = profile_id
+    def update_device_credentials(self, device_id: int, device_key: str) -> None:
+        self.device_id = int(device_id)
+        self.device_key = str(device_key)
         self._persist()
+        logger.info(f"[Config] Device credentials updated for Device ID: {self.device_id}.")
 
     def update_wifi_credentials(self, ssid: str, password: str) -> None:
         self.wifi_ssid = ssid

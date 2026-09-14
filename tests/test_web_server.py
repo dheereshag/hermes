@@ -50,6 +50,8 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("scale", data)
         self.assertIn("argus", data)
         self.assertIn("cloud", data)
+        self.assertIn("device_id", data["cloud"])
+        self.assertIn("configured", data["cloud"])
         self.assertIn("events", data)
 
     def test_post_api_wifi_success(self):

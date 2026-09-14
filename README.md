@@ -32,7 +32,7 @@ hermes/
 │   ├── [test_anpr_client.py](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py)    # ANPR client, response schemas, and plate voting tests
 │   ├── [test_scale_uart.py](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py)     # Scale UART parser, framing, and silence flush tests
 │   ├── [test_session_fallback.py](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) # Weighbridge session error propagation tests
-│   ├── [test_cloud_auth.py](file:///Users/d/Downloads/hermes/tests/test_cloud_auth.py)     # Gluvok API authentication and token refresh tests
+│   ├── [test_cloud_post.py](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py)     # Gluvok API device header auth and payload tests
 │   ├── [test_web_server.py](file:///Users/d/Downloads/hermes/tests/test_web_server.py)     # Diagnostics web console & REST API tests
 │   └── [test_wifi_manager.py](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py)   # Wi-Fi watchdog & emergency hotspot fallback tests
 └── src/
@@ -48,9 +48,8 @@ hermes/
     │   ├── [anpr_client.py](file:///Users/d/Downloads/hermes/src/camera/anpr_client.py)     # Argus ANPR server client & plate voting algorithm
     │   └── [session_manager.py](file:///Users/d/Downloads/hermes/src/camera/session_manager.py) # Weighbridge session lifecycle & image packaging
     ├── network/
-    │   ├── [cloud_client.py](file:///Users/d/Downloads/hermes/src/network/cloud_client.py)    # Gluvok base URL and token state singleton
-    │   ├── [cloud_auth.py](file:///Users/d/Downloads/hermes/src/network/cloud_auth.py)      # Device JWT login & token refresh manager
-    │   ├── [cloud_post.py](file:///Users/d/Downloads/hermes/src/network/cloud_post.py)      # Weighment payload & base64 image uploader
+    │   ├── [cloud_client.py](file:///Users/d/Downloads/hermes/src/network/cloud_client.py)    # Gluvok base URL and device auth header helper
+    │   ├── [cloud_post.py](file:///Users/d/Downloads/hermes/src/network/cloud_post.py)      # Weighment payload builder & stateless API uploader
     │   └── [wifi_manager.py](file:///Users/d/Downloads/hermes/src/network/wifi_manager.py)    # Automatic Wi-Fi watchdog & emergency hotspot monitor
     └── web/
         ├── [__init__.py](file:///Users/d/Downloads/hermes/src/web/__init__.py)        # Web subpackage exports
@@ -74,7 +73,7 @@ hermes/
 | :--- | :--- | :--- |
 | **Scale Subsystem** (`src/scale/`) | Reads raw RS-232 serial stream at 1200 baud, extracts numeric weights via regex, tracks 10s continuous stability (±2 kg), locks session to prevent duplicate uploads. | [`ScaleUARTReader`](file:///Users/d/Downloads/hermes/src/scale/scale_uart.py), [`ScaleStabilityMachine`](file:///Users/d/Downloads/hermes/src/scale/scale_stability.py) |
 | **Camera & ANPR** (`src/camera/`) | Runs 2s ANPR capture loop on Camera 1 during weighing, submits frames to Argus microservice, executes consensus plate voting, captures auxiliary cameras in parallel. | [`anpr_client.py`](file:///Users/d/Downloads/hermes/src/camera/anpr_client.py), [`camera_manager.py`](file:///Users/d/Downloads/hermes/src/camera/camera_manager.py), [`WeighbridgeSessionManager`](file:///Users/d/Downloads/hermes/src/camera/session_manager.py) |
-| **Cloud Network** (`src/network/`) | Manages device JWT auth, automatic 401 token refresh, validates Indian vehicle registration numbers, posts weighment data with base64 images to Gluvok API. | [`WeighbridgeAuthClient`](file:///Users/d/Downloads/hermes/src/network/cloud_auth.py), [`post_to_cloud`](file:///Users/d/Downloads/hermes/src/network/cloud_post.py) |
+| **Cloud Network** (`src/network/`) | Stateless IoT device authentication (`x-device-id`, `x-device-key`), validates Indian vehicle registration numbers, and posts weighment data with direct base64 images to Gluvok API (`POST /api/entries`). | [`get_device_headers`](file:///Users/d/Downloads/hermes/src/network/cloud_client.py), [`post_to_cloud`](file:///Users/d/Downloads/hermes/src/network/cloud_post.py) |
 | **Wi-Fi Recovery** (`src/network/`) | Monitors upstream facility Wi-Fi with `nmcli`; automatically spins up an emergency AP (`Gluvok-Setup` @ `10.42.0.1`) if connection drops, allowing on-site recovery. | [`wifi_manager.py`](file:///Users/d/Downloads/hermes/src/network/wifi_manager.py) |
 | **Web Console** (`src/web/`) | Modular Flask application on port `8080` with Tailwind CSS v4 single-page dashboard for live weight telemetry, system event logs, and password-protected hardware reconfig. | [`create_app`](file:///Users/d/Downloads/hermes/src/web/app.py), [`FallbackWebServer`](file:///Users/d/Downloads/hermes/src/web/server.py), [`index.html`](file:///Users/d/Downloads/hermes/src/web/templates/index.html) |
 
@@ -86,7 +85,7 @@ hermes/
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
-- **Gluvok Cloud API Integration**: Authenticates with Gluvok Auth REST API and posts complete weighment records with base64 images.
+- **Gluvok Cloud API Integration**: Authenticates statelessly with Gluvok edge device headers (`x-device-id`, `x-device-key`) and posts complete weighment records with direct base64 images.
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` (with blueprints for REST APIs and views) for live telemetry, error monitoring, and runtime configuration.
 - **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
 
@@ -106,7 +105,9 @@ Configuration is stored in `config.json` and can be adjusted directly or via the
 - `anpr_camera_url`: Snapshot URL of IP Camera 1.
 - `auxiliary_camera_urls`: List of overview camera snapshot URLs.
 - `serial_port`: Path to UART port (default `/dev/ttyAMA0`).
-- `serial_baudrate`: Baud rate (default `1200`).
+- `device_id`: Integer primary key of the edge device from Gluvok's `devices` table (default `1`).
+- `device_key`: Pre-shared secret key for stateless header authentication.
+- `center_id`: Collection center identifier (default `1`).
 - `min_weight`: Minimum threshold in kg to trigger a weighing session (default `50.0`).
 
 ### 3. Run Quality Gates & Tests

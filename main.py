@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 # ── Import core modules ───────────────────────────────────────────────────────
 from src.camera.session_manager import session_manager
 from src.config.config_manager import config
-from src.network.cloud_auth import login_to_cloud
 from src.network.wifi_manager import start_wifi_watchdog, stop_wifi_watchdog
 from src.scale.scale_stability import scale_state_machine
 from src.scale.scale_uart import get_uart_reader
@@ -67,16 +66,16 @@ def setup():
 
     # Log active settings from config.json
     logger.info(
-        f"[Config] Email: '{config.api_email}' | "
+        f"[Config] Device ID: {config.device_id} | "
         f"Center ID: {config.center_id} | "
         f"Threshold: {config.weight_threshold:.1f} kg"
     )
 
-    # Authenticate with Gluvok Cloud backend
-    if config.api_email and config.api_password:
-        login_to_cloud()
+    # Verify Gluvok Cloud device credentials
+    if config.device_id and config.device_key:
+        logger.info(f"[Auth] Gluvok device authentication configured for Device ID: {config.device_id}")
     else:
-        logger.info("[Auth] Cloud credentials not set in config.json.")
+        logger.warning("[Auth] Gluvok device credentials (device_id, device_key) not configured in config.json.")
 
 
 def loop():

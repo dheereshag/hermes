@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import logging
 import re
@@ -6,8 +8,7 @@ from typing import Any
 import requests
 
 from src.config.config_manager import config
-from src.network.cloud_auth import ensure_valid_auth, refresh_gluvok_token
-from src.network.cloud_client import GLUVOK_BASE_URL, auth_state
+from src.network.cloud_client import GLUVOK_BASE_URL, get_device_headers
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ def sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]:
     return raw, fallback_plate
 
 
-def _build_entry_payload(session_payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """Builds the API entry payload and base64 images list from session dictionary."""
+def _build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]:
+    """Builds the API entry payload with base64 images list from session dictionary."""
     images_list: list[str] = []
     weight_val = float(session_payload.get("weight", 0.0))
     raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
@@ -57,29 +58,94 @@ def _build_entry_payload(session_payload: dict[str, Any]) -> tuple[dict[str, Any
                 b64_aux = base64.b64encode(img_bytes).decode("utf-8")
                 images_list.append(f"data:image/jpeg;base64,{b64_aux}")
 
-    payload = {
+    return {
         "detected_vehicle_number": detected_plate,
         "weight": round(weight_val, 3),
         "center_id": config.center_id,
-        "status": "pending",
         "images": images_list,
     }
-    return payload, images_list
 
 
-def post_to_cloud(session_payload: dict[str, Any], is_retry: bool = False) -> None:
+def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -> None:
+    """Safely logs system and error events to the diagnostics web store."""
+    try:
+        from src.web.server import record_error_event, record_system_event
+
+        if is_error:
+            record_error_event(event_type, message)
+            record_system_event("CLOUD", f"Upload error ({event_type}): {message}")
+        else:
+            record_system_event(event_type, message)
+    except (ImportError, AttributeError):
+        pass
+
+
+def _handle_response_status(response: requests.Response, payload: dict[str, Any]) -> None:
+    """Evaluates HTTP response status code and logs telemetry events."""
+    if response.status_code in (200, 201):
+        res_data = response.json() if response.content else {}
+        entry_id = res_data.get("data", {}).get("id", "N/A")
+        logger.info(
+            f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})"
+        )
+        _record_cloud_event(
+            "CLOUD",
+            f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload.get('weight')} kg",
+        )
+    elif response.status_code == 401:
+        logger.error(
+            "[Gluvok API] 401 Unauthorized: Missing or invalid device authentication headers."
+        )
+        _record_cloud_event(
+            "CLOUD_AUTH_FAILED",
+            "401 Unauthorized: Missing device authentication headers",
+            is_error=True,
+        )
+    elif response.status_code == 403:
+        logger.error(
+            "[Gluvok API] 403 Forbidden: Invalid device key, device not found, or device deactivated."
+        )
+        _record_cloud_event(
+            "CLOUD_AUTH_FORBIDDEN",
+            "403 Forbidden: Invalid device key, not found, or deactivated",
+            is_error=True,
+        )
+    elif response.status_code == 400:
+        logger.error(f"[Gluvok API] 400 Bad Request: Validation failed: {response.text}")
+        _record_cloud_event(
+            "CLOUD_VALIDATION_ERROR",
+            f"400 Bad Request: {response.text}",
+            is_error=True,
+        )
+    else:
+        logger.error(f"[Gluvok API] POST /api/entries failed HTTP {response.status_code}: {response.text}")
+        _record_cloud_event(
+            "CLOUD_UPLOAD_ERROR",
+            f"HTTP {response.status_code}",
+            is_error=True,
+        )
+
+
+def post_to_cloud(session_payload: dict[str, Any]) -> None:
     """
     Submits vehicle weighment session to Gluvok API (/api/entries).
-    Handles Bearer token auth, dynamic token refresh on 401, and direct Base64 image payloads.
+    Authenticates statelessly via custom headers (x-device-id, x-device-key).
     """
-    if not ensure_valid_auth():
-        logger.warning("[Gluvok API] POST entry aborted: Authentication failed.")
+    if not config.device_id or not config.device_key:
+        logger.warning(
+            "[Gluvok API] POST entry aborted: Device credentials (device_id, device_key) not configured."
+        )
+        _record_cloud_event(
+            "CLOUD_AUTH_FAILED",
+            "Device credentials not configured in config.json",
+            is_error=True,
+        )
         return
 
     entries_url = f"{GLUVOK_BASE_URL}/api/entries"
     logger.info(f"[Gluvok API] Transmitting weighment entry to: {entries_url}")
 
-    payload, images_list = _build_entry_payload(session_payload)
+    payload = _build_entry_payload(session_payload)
 
     logger.info(
         f"[Gluvok API] Transmitting payload: Detected Vehicle='{payload.get('detected_vehicle_number')}', "
@@ -88,53 +154,15 @@ def post_to_cloud(session_payload: dict[str, Any], is_retry: bool = False) -> No
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {auth_state.access_token}",
         "Connection": "close",
+        **get_device_headers(),
     }
 
     try:
         response = requests.post(entries_url, json=payload, headers=headers, timeout=20)
-        if response.status_code in (200, 201):
-            res_data = response.json() if response.content else {}
-            entry_id = res_data.get("data", {}).get("id", "N/A")
-            logger.info(f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})")
-            try:
-                from src.web.server import record_system_event
-                record_system_event(
-                    "CLOUD",
-                    f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload['weight']} kg",
-                )
-            except (ImportError, AttributeError):
-                pass
-        elif response.status_code == 401 and not is_retry:
-            logger.warning("[Gluvok API] Access token expired (401). Refreshing token and retrying entry POST...")
-            if refresh_gluvok_token():
-                post_to_cloud(session_payload, is_retry=True)
-            else:
-                logger.error("[Gluvok API] Token refresh failed on 401 response.")
-                try:
-                    from src.web.server import record_error_event, record_system_event
-                    record_error_event("CLOUD_AUTH_FAILED", "Token refresh failed")
-                    record_system_event("CLOUD", "Cloud access token refresh failed.")
-                except (ImportError, AttributeError):
-                    pass
-        else:
-            logger.error(f"[Gluvok API] POST /api/entries failed HTTP {response.status_code}: {response.text}")
-            try:
-                from src.web.server import record_error_event, record_system_event
-                record_error_event("CLOUD_UPLOAD_ERROR", f"HTTP {response.status_code}")
-                record_system_event("CLOUD", f"Gluvok API entry POST failed: HTTP {response.status_code}")
-            except (ImportError, AttributeError):
-                pass
+        _handle_response_status(response, payload)
     except (requests.RequestException, ValueError, KeyError) as e:
         logger.error(f"[Gluvok API] Network exception during entry transmission: {e}")
-        try:
-            from src.web.server import record_error_event, record_system_event
-            record_error_event("CLOUD_UPLOAD_ERROR", str(e))
-            record_system_event("CLOUD", f"Gluvok API POST exception: {e}")
-        except (ImportError, AttributeError):
-            pass
+        _record_cloud_event("CLOUD_UPLOAD_ERROR", str(e), is_error=True)
     finally:
         session_payload.clear()
-        payload.clear()
-        images_list.clear()

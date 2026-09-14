@@ -96,7 +96,6 @@ def login():
 def status():
     """Returns complete real-time operational telemetry snapshot."""
     from src.camera.anpr_client import resolve_anpr_endpoint
-    from src.network.cloud_client import auth_state
     from src.network.wifi_manager import is_hotspot_active, is_wifi_connected
     from src.scale.scale_stability import get_current_weight, get_scale_state
 
@@ -117,7 +116,8 @@ def status():
         },
         "cloud": {
             "center_id": config.center_id,
-            "authenticated": auth_state.is_token_valid,
+            "device_id": config.device_id,
+            "configured": bool(config.device_id and config.device_key),
         },
         "cameras": {
             "cam1_url": config.anpr_camera_url,
@@ -129,7 +129,7 @@ def status():
         },
         "config": {
             "wifi_ssid": config.wifi_ssid,
-            "operator_email": config.api_email,
+            "device_id": config.device_id,
             "min_weight": config.weight_threshold,
             "serial_port": config.serial_port,
             "serial_baudrate": config.serial_baudrate,

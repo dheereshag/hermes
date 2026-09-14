@@ -1,23 +1,22 @@
 """
 cloud_client.py
-Base URL and AuthState singleton for the Gluvok Cloud API backend (gluvok.vercel.app).
+Base URL and stateless IoT device header helpers for Gluvok Cloud API (gluvok.vercel.app).
 """
 
-import time
+from __future__ import annotations
+
+from src.config.config_manager import config
 
 GLUVOK_BASE_URL = "https://gluvok.vercel.app"
 
 
-class AuthState:
-    def __init__(self):
-        self.access_token: str = ""
-        self.refresh_token: str = ""
-        self.expires_at: float = 0.0
-
-    @property
-    def is_token_valid(self) -> bool:
-        # Valid if access token exists and has at least 30 seconds before expiry
-        return bool(self.access_token) and (time.time() < self.expires_at - 30.0)
-
-
-auth_state = AuthState()
+def get_device_headers() -> dict[str, str]:
+    """
+    Returns custom authentication headers required for edge device requests.
+    - x-device-id: Integer primary key from the devices table
+    - x-device-key: Raw pre-shared key
+    """
+    return {
+        "x-device-id": str(config.device_id),
+        "x-device-key": config.device_key,
+    }

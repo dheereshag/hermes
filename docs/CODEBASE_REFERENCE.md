@@ -23,7 +23,6 @@ Welcome to the **Hermes Weighbridge & ANPR Integration Controller** maintainer m
    - [`session_manager.py`](#srccamerasession_managerpy)
 6. [Cloud & Network Subsystem (`src/network/`)](#6-cloud--network-subsystem-srcnetwork)
    - [`cloud_client.py`](#srcnetworkcloud_clientpy)
-   - [`cloud_auth.py`](#srcnetworkcloud_authpy)
    - [`cloud_post.py`](#srcnetworkcloud_postpy)
    - [`wifi_manager.py`](#srcnetworkwifi_managerpy)
 7. [Web Diagnostics Subsystem (`src/web/`)](#7-web-diagnostics-subsystem-srcweb)
@@ -88,7 +87,7 @@ Application lifecycle entry point and process daemon runner.
   1. Starts `ScaleUARTReader` background thread listening on configured port/baud.
   2. Launches `FallbackWebServer` on port `8080` serving the diagnostics UI.
   3. Starts `start_wifi_watchdog(interval=30.0)` for emergency hotspot failover.
-  4. Checks credentials in `config.json` and authenticates with Gluvok Cloud API via `login_to_cloud()`.
+  4. Validates edge device credentials (`device_id`, `device_key`) in `config.json`.
 - **`loop() -> None`**:
   Main execution tick running every 1 second:
   - Invokes `session_manager.check_session_progress()`. If a post-stabilization countdown has elapsed, dispatches `scale_state_machine._trigger_upload(completed_package)`.
@@ -102,9 +101,8 @@ Local JSON file storing persistent configuration. Managed automatically by `Conf
   "password": "WiFi_WPA_Password",
   "center_id": 1,
   "min_weight": 50.0,
-  "api_email": "device@gluvok.com",
-  "api_password": "DevicePassword",
-  "profile_id": -1,
+  "device_id": 1,
+  "device_key": "hardware123",
   "anpr_server_url": "http://127.0.0.1:8000/recognize",
   "serial_port": "/dev/ttyAMA0",
   "serial_baudrate": 1200,
@@ -137,9 +135,8 @@ Thread-safe singleton managing configuration loading, schema migration, and JSON
   - `wifi_password`: WPA/WPA2 passphrase.
   - `center_id`: Numeric identifier for the physical weighing center.
   - `weight_threshold`: Minimum weight (kg) required to trigger a weighing session (default: `50.0 kg`).
-  - `api_email`: Account email used to log into Gluvok Cloud API.
-  - `api_password`: Account password.
-  - `profile_id`: Operator profile ID.
+  - `device_id`: Integer primary key of the edge device from Gluvok's `devices` table (default: `1`).
+  - `device_key`: Pre-shared secret key string for stateless header authentication.
   - `anpr_server_url`: Override URL for Argus ANPR (default: `""`).
   - `serial_port`: Path to UART character device (default: `"/dev/ttyAMA0"`).
   - `serial_baudrate`: Serial communication speed (default: `1200`).
@@ -147,12 +144,12 @@ Thread-safe singleton managing configuration loading, schema migration, and JSON
   - `auxiliary_camera_urls`: List of snapshot URLs for Cameras 2..N.
 - **Methods**:
   - **`__init__(file_path=CONFIG_FILE_PATH)`**: Initializes default values and calls `load_settings()`.
-  - **`load_settings() -> None`**: Reads `config.json`. If missing, creates a default template. Gracefully migrates legacy keys (`sb_email` → `api_email`, `sb_pass` → `api_password`).
+  - **`load_settings() -> None`**: Reads `config.json`. If missing, creates a default template.
   - **`_build_data_dict() -> dict[str, Any]`**: Assembles current in-memory fields into a clean dictionary.
   - **`_persist() -> None`**: Writes data dictionary to `config.json` with 2-space indentation.
-  - **`save_settings(...) -> None`**: High-level method to update Wi-Fi, Center ID, weight threshold, and cloud credentials.
+  - **`save_settings(...) -> None`**: High-level method to update Wi-Fi, Center ID, weight threshold, and device credentials.
   - **`update_system_config(...) -> None`**: Live reconfiguration of hardware parameters (threshold, port, baud, camera URLs).
-  - **`update_profile_id(profile_id: int) -> None`**: Updates active operator ID.
+  - **`update_device_credentials(device_id: int, device_key: str) -> None`**: Updates edge device credentials.
   - **`update_wifi_credentials(ssid: str, password: str) -> None`**: Updates network credentials.
   - **`clear_wifi_credentials() -> None`**: Clears Wi-Fi credentials to trigger emergency AP mode.
 - **Global**: `config = ConfigManager()` (Singleton used across all modules).
@@ -275,50 +272,31 @@ Coordinates weighbridge session lifecycle, multi-camera coordination, and data a
 ## 6. Cloud & Network Subsystem (`src/network/`)
 
 ### `src/network/cloud_client.py`
-API endpoint definition and token state singleton.
+API endpoint definition and edge device authentication headers.
 
 - **`GLUVOK_BASE_URL = "https://gluvok.vercel.app"`**: Base URL for cloud persistence.
-- **Class: `AuthState`**:
-  - `access_token`: Short-lived JWT bearer token.
-  - `refresh_token`: Long-lived rotation token.
-  - `expires_at`: Epoch timestamp of token expiration.
-  - **`is_token_valid -> bool`**: Returns `True` if token is non-empty and has at least 30 seconds before expiration.
-- **Global**: `auth_state = AuthState()` (Singleton).
-
-### `src/network/cloud_auth.py`
-JWT device authentication, token refreshing, and retry policies.
-
-- **Class: `WeighbridgeAuthClient`**:
-  - **`login() -> None`**: Sends credentials to `POST /api/auth/login`. Updates `auth_state`.
-  - **`refresh() -> None`**: Sends refresh token to `POST /api/auth/refresh`. If expired, falls back to full `login()`.
-  - **`get_valid_token() -> str`**: Returns active access token, performing refresh or login automatically if needed.
-  - **`post_entry(entry_payload: dict) -> requests.Response`**: Posts entry to `/api/entries`. Automatically intercepts HTTP 401 Unauthorized responses, refreshes the access token, and retries the request once.
-- **Functions**:
-  - **`login_to_cloud() -> bool`**: Authenticates device credentials from `config.json`.
-  - **`refresh_gluvok_token() -> bool`**: Explicitly refreshes the cloud token.
-  - **`ensure_valid_auth() -> bool`**: Validates token health before upload attempts.
+- **`get_device_headers() -> dict[str, str]`**: Generates custom HTTP headers (`x-device-id`, `x-device-key`) for stateless edge device authentication.
 
 ### `src/network/cloud_post.py`
-Weighment record formatting, Indian license plate sanitization, and base64 payload upload.
+Weighment record formatting, Indian license plate sanitization, and stateless base64 payload upload.
 
 - **Constant: `INDIAN_PLATE_REGEX`**:
   `r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"`
   Validates standard state plates (e.g. `MH12AB1234`) and Bharat Series plates (e.g. `22BH1234AA`).
 - **`sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]`**:
   Returns `(detected_vehicle_number, vehicle_number)`. If ANPR detected an error string (e.g. `NO_PLATE_DETECTED`), forwards the raw error as `detected_vehicle_number` and uses placeholder `MH00XX0000` as `vehicle_number` so the cloud schema validates cleanly.
-- **`_build_entry_payload(session_payload: dict[str, Any]) -> tuple[dict, list[str]]`**:
-  Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON object:
+- **`_build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]`**:
+  Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON payload:
   ```json
   {
     "detected_vehicle_number": "RJ09GA0165",
     "weight": 36500.0,
     "center_id": 1,
-    "status": "pending",
     "images": ["data:image/jpeg;base64,..."]
   }
   ```
-- **`post_to_cloud(session_payload: dict[str, Any], is_retry: bool = False) -> None`**:
-  Transmits weighment payload to `POST /api/entries`. Intercepts 401s for token refresh and handles network dropouts. Clears image memory buffers in `finally:` block.
+- **`post_to_cloud(session_payload: dict[str, Any]) -> None`**:
+  Transmits weighment payload to `POST /api/entries` with custom device headers. Handles HTTP status codes (`201 Created`, `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, `500 Server Error`). Clears raw image memory in caller `session_payload` upon completion.
 
 ### `src/network/wifi_manager.py`
 Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
@@ -448,7 +426,7 @@ Hermes contains a comprehensive suite of unit and integration tests executing un
 | [`tests/test_scale_uart.py`](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py) | `TestScaleUARTReader` | Packet parsing (`26500MN\r\n`), split/chunked serial frames, 300ms inter-character silence timeout flush, STX/ETX framing (`\x02...\x03`), and signed float decimals (`+05000.5kg`, `-12.5`). |
 | [`tests/test_anpr_client.py`](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py) | `TestANPRClient` | Empty byte handling, Argus recognition schema parsing (`results[].plate`), pre-screening rejection parsing (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`), flat JSON parsing, network timeout & connection error codes, and highest-frequency consensus plate voting algorithm. |
 | [`tests/test_session_fallback.py`](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) | `TestSessionErrorFallback` | Weighbridge session error propagation (confirming rejected Argus status is forwarded as plate value while still packaging the truck overview image), and consensus preference for valid plates over transient errors. |
-| [`tests/test_cloud_auth.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_auth.py) | `TestWeighbridgeAuthClient` | Gluvok device authentication, token expiry calculation, token refresh rotation, fallback to full login if refresh token expires, and automatic HTTP 401 retry on entry POST. |
+| [`tests/test_cloud_post.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py) | `TestCloudPost` | Stateless device authentication headers (`x-device-id`, `x-device-key`), payload construction, Base64 URI generation, HTTP 201 Created flow, and error handling (401, 403, 400, 500, network exceptions). |
 | [`tests/test_web_server.py`](file:///Users/d/Downloads/hermes/tests/test_web_server.py) | `TestFlaskDiagnosticsApp` | Flask web application routes (`/`, `/scale`, `/anpr`, `/cloud`, etc.), `/api/status` schema, Wi-Fi provisioning (`/api/wifi`, `/api/wifi/clear`), configuration updates (`POST /api/config`), input validation, 401 Unauthorized handling, 404 responses, and `FallbackWebServer` thread lifecycle (`start`/`stop`). |
 | [`tests/test_wifi_manager.py`](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py) | `TestWiFiManager` | NetworkManager `nmcli` parsing, active connection detection, exclusion of emergency hotspot from external Wi-Fi status, AP start and stop commands, connection failure recovery, and watchdog background thread control. |
 
