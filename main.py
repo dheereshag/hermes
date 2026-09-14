@@ -25,9 +25,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Import core modules ───────────────────────────────────────────────────────
+from src.camera.session_manager import session_manager
 from src.config.config_manager import config
 from src.network.supabase_auth import login_to_supabase
 from src.network.wifi_manager import start_wifi_watchdog, stop_wifi_watchdog
+from src.scale.scale_stability import scale_state_machine
 from src.scale.scale_uart import get_uart_reader
 from src.web.server import start_web_server, stop_web_server
 
@@ -77,10 +79,10 @@ def setup():
         logger.info("[Auth] Supabase credentials not set in config.json.")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  LOOP
-# ─────────────────────────────────────────────────────────────────────────────
 def loop():
+    completed_package = session_manager.check_session_progress()
+    if completed_package:
+        scale_state_machine._trigger_upload(completed_package)
     time.sleep(1)
 
 # ─────────────────────────────────────────────────────────────────────────────

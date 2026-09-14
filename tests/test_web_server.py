@@ -1,131 +1,142 @@
+from __future__ import annotations
+
 import json
-import time
 import unittest
-import urllib.error
-import urllib.request
 
 from src.config.config_manager import config
+from src.web.app import create_app
+from src.web.auth import reset_auth_state
 from src.web.server import FallbackWebServer
+from src.web.state import reset_state
 
 
-class TestFallbackWebServer(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # Start test web server on non-standard test port
-        cls.test_port = 8899
-        cls.server = FallbackWebServer(host="127.0.0.1", port=cls.test_port)
-        cls.server.start()
-        time.sleep(0.3)  # Allow socket to bind
-        login_url = f"http://127.0.0.1:{cls.test_port}/api/login"
-        login_payload = json.dumps(
-            {"userid": "superadmin", "password": "Gluvok@241821"}
-        ).encode("utf-8")
-        login_request = urllib.request.Request(
-            login_url,
-            data=login_payload,
-            headers={"Content-Type": "application/json"},
+class TestFlaskDiagnosticsApp(unittest.TestCase):
+    def setUp(self):
+        reset_state()
+        reset_auth_state()
+        self.app = create_app({"TESTING": True})
+        self.client = self.app.test_client()
+
+        # Obtain valid superadmin token for protected tests
+        res = self.client.post(
+            "/api/login",
+            data=json.dumps({"userid": "superadmin", "password": "Gluvok@241821"}),
+            content_type="application/json",
         )
-        with urllib.request.urlopen(login_request, timeout=3.0) as response:
-            cls.auth_token = json.loads(response.read().decode("utf-8"))["token"]
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
+        self.assertEqual(res.status_code, 200)
+        self.auth_token = res.get_json()["token"]
 
     def test_get_index_html(self):
-        url = f"http://127.0.0.1:{self.test_port}/"
-        with urllib.request.urlopen(url, timeout=3.0) as res:
-            self.assertEqual(res.status, 200)
-            content_type = res.headers.get("Content-Type", "")
-            self.assertIn("text/html", content_type)
-            html_body = res.read().decode("utf-8")
-            self.assertIn("Gluvok Hermes", html_body)
-            self.assertIn("tailwindcss", html_body)
-            self.assertIn("NO_PLATE_DETECTED", html_body)
-            self.assertIn("REJECTED_HUMAN_DETECTED", html_body)
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("text/html", res.content_type)
+        html = res.get_data(as_text=True)
+        self.assertIn("Gluvok Hermes", html)
+        self.assertIn("tailwindcss", html)
+        self.assertIn("NO_PLATE_DETECTED", html)
+        self.assertIn("REJECTED_HUMAN_DETECTED", html)
 
     def test_subsystem_page_routes(self):
-        for route in ("/scale", "/anpr", "/cloud", "/wifi", "/telemetry"):
-            url = f"http://127.0.0.1:{self.test_port}{route}"
-            with urllib.request.urlopen(url, timeout=3.0) as res:
-                self.assertEqual(res.status, 200)
-                content_type = res.headers.get("Content-Type", "")
-                self.assertIn("text/html", content_type)
-
-
-
+        for route in ("/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config"):
+            res = self.client.get(route)
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("text/html", res.content_type)
 
     def test_get_api_status(self):
-        url = f"http://127.0.0.1:{self.test_port}/api/status"
-        with urllib.request.urlopen(url, timeout=3.0) as res:
-            self.assertEqual(res.status, 200)
-            data = json.loads(res.read().decode("utf-8"))
-            self.assertEqual(data["status"], "healthy")
-            self.assertIn("scale", data)
-            self.assertIn("argus", data)
-            self.assertIn("supabase", data)
-            self.assertIn("events", data)
+        res = self.client.get("/api/status")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["status"], "healthy")
+        self.assertIn("scale", data)
+        self.assertIn("argus", data)
+        self.assertIn("supabase", data)
+        self.assertIn("events", data)
 
     def test_post_api_wifi_success(self):
-        url = f"http://127.0.0.1:{self.test_port}/api/wifi"
-        payload = json.dumps({"ssid": "TestRouter_5G", "password": "SecretPassword123"}).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "X-Auth-Token": self.auth_token,
-            },
+        payload = {"ssid": "TestRouter_5G", "password": "SecretPassword123"}
+        res = self.client.post(
+            "/api/wifi",
+            data=json.dumps(payload),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
         )
-
-        with urllib.request.urlopen(req, timeout=3.0) as res:
-            self.assertEqual(res.status, 200)
-            data = json.loads(res.read().decode("utf-8"))
-            self.assertTrue(data.get("success"))
-
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("success"))
         self.assertEqual(config.wifi_ssid, "TestRouter_5G")
         self.assertEqual(config.wifi_password, "SecretPassword123")
 
     def test_post_api_wifi_empty_ssid_error(self):
-        url = f"http://127.0.0.1:{self.test_port}/api/wifi"
-        payload = json.dumps({"ssid": "", "password": "password"}).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "X-Auth-Token": self.auth_token,
-            },
+        payload = {"ssid": "", "password": "password"}
+        res = self.client.post(
+            "/api/wifi",
+            data=json.dumps(payload),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
         )
-
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(req, timeout=3.0)
-        self.assertEqual(ctx.exception.code, 400)
+        self.assertEqual(res.status_code, 400)
 
     def test_post_api_wifi_clear(self):
-        url = f"http://127.0.0.1:{self.test_port}/api/wifi/clear"
-        req = urllib.request.Request(
-            url,
-            data=b"{}",
-            headers={
-                "Content-Type": "application/json",
-                "X-Auth-Token": self.auth_token,
-            },
+        res = self.client.post(
+            "/api/wifi/clear",
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+            content_type="application/json",
         )
-
-        with urllib.request.urlopen(req, timeout=3.0) as res:
-            self.assertEqual(res.status, 200)
-            data = json.loads(res.read().decode("utf-8"))
-            self.assertTrue(data.get("success"))
-
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("success"))
         self.assertEqual(config.wifi_ssid, "")
         self.assertEqual(config.wifi_password, "")
 
+    def test_post_api_config_success(self):
+        payload = {
+            "min_weight": 65.0,
+            "serial_port": "/dev/ttyUSB0",
+            "serial_baudrate": 9600,
+            "anpr_camera_url": "http://192.168.1.150/snapshot",
+            "auxiliary_camera_urls": ["http://192.168.1.151/snapshot"],
+            "anpr_server_url": "http://127.0.0.1:8000/recognize",
+        }
+        res = self.client.post(
+            "/api/config",
+            data=json.dumps(payload),
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(config.supabase_weight_threshold, 65.0)
+        self.assertEqual(config.serial_port, "/dev/ttyUSB0")
+        self.assertEqual(config.serial_baudrate, 9600)
+
+    def test_post_api_config_unauthorized(self):
+        res = self.client.post(
+            "/api/config",
+            data=json.dumps({"min_weight": 100.0}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 401)
+
+    def test_post_api_config_invalid_payload(self):
+        res = self.client.post(
+            "/api/config",
+            data=json.dumps({"min_weight": -50.0}),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+
     def test_404_not_found(self):
-        url = f"http://127.0.0.1:{self.test_port}/unknown_endpoint"
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(url, timeout=3.0)
-        self.assertEqual(ctx.exception.code, 404)
+        res = self.client.get("/api/unknown_endpoint")
+        self.assertEqual(res.status_code, 404)
+        data = res.get_json()
+        self.assertIn("error", data)
+
+    def test_server_lifecycle(self):
+        server = FallbackWebServer(host="127.0.0.1", port=8991)
+        server.start()
+        self.assertTrue(server._is_running)
+        server.stop()
+        self.assertFalse(server._is_running)
 
 
 if __name__ == "__main__":

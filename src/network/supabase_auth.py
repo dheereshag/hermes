@@ -48,7 +48,7 @@ class WeighbridgeAuthClient:
             )
             response.raise_for_status()
             self._save_tokens(response.json())
-        except requests.RequestException, ValueError, KeyError, TypeError:
+        except (requests.RequestException, ValueError, KeyError, TypeError):
             self.login()
 
     def get_valid_token(self) -> str:
@@ -91,7 +91,7 @@ def _record_auth_failure(message: str) -> None:
 
         record_error_event("CLOUD_AUTH_FAILED", message)
         record_system_event("CLOUD", f"Auth failed: {message}")
-    except ImportError, AttributeError:
+    except (ImportError, AttributeError):
         pass
 
 

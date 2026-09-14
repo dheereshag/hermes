@@ -96,39 +96,47 @@ class ScaleUARTReader:
             self._serial = None
             return False
 
+    def _reconnect_if_needed(self, last_attempt: float) -> float:
+        now = time.time()
+        if now - last_attempt >= 5.0:
+            logger.info("[Scale] Attempting serial port reconnect...")
+            self._open_serial()
+            return now
+        return last_attempt
+
+    def _read_incoming_bytes(self) -> None:
+        if self._serial is None or not self._serial.is_open:
+            return
+        try:
+            n = getattr(self._serial, "in_waiting", 1) or 1
+            raw = self._serial.read(max(1, min(n, 64)))
+            if raw:
+                for b in raw:
+                    self.handle_scale_char(b)
+            self._check_timeout_flush()
+        except (serial.SerialException, OSError, TypeError) as e:
+            if not self._running:
+                return
+            logger.error(f"[Scale] UART connection lost / read error: {e}. Reconnecting in 5s...")
+            if self._serial:
+                try:
+                    self._serial.close()
+                except (OSError, serial.SerialException):
+                    pass
+                self._serial = None
+            time.sleep(1.0)
+
     def _read_loop(self):
         logger.info("[Scale] UART reader loop started listening for weight data...")
         last_reconnect_attempt = 0.0
 
         while self._running:
-            # Attempt auto-reconnect if serial port is closed or disconnected
             if self._serial is None or not self._serial.is_open:
-                now = time.time()
-                if now - last_reconnect_attempt >= 5.0:  # Retry every 5s
-                    last_reconnect_attempt = now
-                    logger.info("[Scale] Attempting serial port reconnect...")
-                    self._open_serial()
+                last_reconnect_attempt = self._reconnect_if_needed(last_reconnect_attempt)
                 time.sleep(0.5)
                 continue
 
-            try:
-                n = getattr(self._serial, 'in_waiting', 1) or 1
-                raw = self._serial.read(max(1, min(n, 64)))
-                if raw:
-                    for b in raw:
-                        self.handle_scale_char(b)
-                self._check_timeout_flush()
-            except (serial.SerialException, OSError, TypeError) as e:
-                if not self._running:
-                    break
-                logger.error(f"[Scale] UART connection lost / read error: {e}. Reconnecting in 5s...")
-                if self._serial:
-                    try:
-                        self._serial.close()
-                    except OSError, serial.SerialException:
-                        pass
-                    self._serial = None
-                time.sleep(1.0)
+            self._read_incoming_bytes()
 
     def handle_scale_char(self, c):
         """

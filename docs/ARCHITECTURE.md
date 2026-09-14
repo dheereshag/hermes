@@ -82,14 +82,21 @@ graph TD
   - Automatically spins up an emergency Wi-Fi Access Point (`Gluvok-Setup` / `gluvok1234`) on `wlan0` if connection to the facility router is lost, allowing on-site technicians to connect directly.
 
 ### 2.4 Diagnostics Web Dashboard (`src/web/`)
-- **`FallbackWebServer` (`server.py`)**:
-  - Standalone multi-threaded HTTP server listening on port `8080`.
-  - Serves an embedded dashboard (`templates/index.html`) featuring live scale telemetry, camera feed statuses, cloud sync status, and system event logs.
-  - REST endpoints:
-    - `POST /api/login`: Issues session tokens with rate-limiting and constant-time credential comparison.
-    - `GET /api/status`: Real-time operational telemetry.
-    - `GET /api/config` & `POST /api/config`: Live reconfiguration of threshold weight, serial port/baud, and camera URLs with dynamic runtime application.
-    - `POST /api/wifi` & `POST /api/wifi/clear`: Facility Wi-Fi provisioning.
+- **Application Factory (`app.py`)**:
+  - Implements `create_app()` constructing the Flask WSGI application with custom error handlers, templates directory bindings, and global security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`).
+- **Blueprints (`src/web/blueprints/`)**:
+  - `views.py`: Serves the embedded dashboard (`templates/index.html`) across subsystem routes (`/`, `/scale`, `/anpr`, `/cloud`, `/wifi`, `/telemetry`, `/errors`, `/config`).
+  - `api.py`: Implements RESTful endpoints:
+    - `POST /api/login`: Issues session tokens with sliding 2h expiration, brute-force defense (5 attempts/60s), and constant-time credential comparison (`auth.py`).
+    - `GET /api/status`: Real-time operational telemetry snapshot.
+    - `GET /api/config` & `POST /api/config`: Live reconfiguration of threshold weight, serial port/baud, and camera URLs with input sanitization (`validation.py`) and dynamic UART restart.
+    - `POST /api/wifi` & `POST /api/wifi/clear`: Facility Wi-Fi provisioning and credential clearing.
+- **State & Telemetry Store (`state.py`)**:
+  - Thread-safe decoupled store for circular system event logs (`max 20 entries`), latest weighment results, and live error counters.
+- **Authentication & Security Middleware (`auth.py`)**:
+  - Cryptographic token generator and `@auth_required` decorator supporting `Authorization: Bearer` and `X-Auth-Token` headers.
+- **Server Runner (`server.py`)**:
+  - `FallbackWebServer` wraps Werkzeug's `make_server` to serve the WSGI application in a background daemon thread with graceful `start()` and `stop()` lifecycle management.
 
 ### 2.5 Configuration Management (`src/config/`)
 - **`config_manager.py`**:

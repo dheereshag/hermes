@@ -43,7 +43,16 @@ hermes/
     │   ├── supabase_post.py   # Weighment payload & base64 image uploader
     │   └── wifi_manager.py    # Automatic Wi-Fi watchdog & emergency hotspot monitor
     └── web/
-        ├── server.py          # Embedded diagnostics HTTP server (:8080) & REST APIs
+        ├── __init__.py        # Web subpackage exports
+        ├── app.py             # Flask application factory (create_app)
+        ├── auth.py            # Superadmin auth, token sliding, rate limiting, and decorators
+        ├── state.py           # Decoupled thread-safe telemetry and event log buffer
+        ├── validation.py      # Input sanitization and URL validation utilities
+        ├── blueprints/
+        │   ├── __init__.py    # Blueprint exports
+        │   ├── api.py         # REST API endpoints (/api/status, /api/config, /api/login, etc.)
+        │   └── views.py       # Page routes serving the dashboard UI
+        ├── server.py          # Threaded WSGI server runner (:8080) & lifecycle management
         └── templates/
             └── index.html     # Real-time Tailwind CSS diagnostics & configuration web UI
 ```
@@ -57,7 +66,7 @@ hermes/
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
 - **Supabase / Gluvok Cloud Integration**: Authenticates with Gluvok Auth REST API and posts complete weighment records with base64 images.
-- **Web Diagnostics Dashboard**: Lightweight local HTTP console on port `8080` for live telemetry, error monitoring, and runtime configuration.
+- **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` (with blueprints for REST APIs and views) for live telemetry, error monitoring, and runtime configuration.
 - **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
 
 ---
