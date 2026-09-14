@@ -49,7 +49,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(data["status"], "healthy")
         self.assertIn("scale", data)
         self.assertIn("argus", data)
-        self.assertIn("supabase", data)
+        self.assertIn("cloud", data)
         self.assertIn("events", data)
 
     def test_post_api_wifi_success(self):
@@ -104,7 +104,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(config.supabase_weight_threshold, 65.0)
+        self.assertEqual(config.weight_threshold, 65.0)
         self.assertEqual(config.serial_port, "/dev/ttyUSB0")
         self.assertEqual(config.serial_baudrate, 9600)
 

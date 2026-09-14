@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from src.network.supabase_auth import WeighbridgeAuthClient
+from src.network.cloud_auth import WeighbridgeAuthClient
 
 
 class TestWeighbridgeAuthClient:
@@ -12,7 +12,7 @@ class TestWeighbridgeAuthClient:
         state = SimpleNamespace(access_token="", refresh_token="", expires_at=0.0)
         return WeighbridgeAuthClient("https://example.test/", "device", "secret", state)
 
-    @patch("src.network.supabase_auth.requests.post")
+    @patch("src.network.cloud_auth.requests.post")
     def test_login_saves_tokens_and_expiry(self, post: Mock) -> None:
         response = Mock()
         response.json.return_value = {
@@ -35,7 +35,7 @@ class TestWeighbridgeAuthClient:
         assert client.refresh_token == "refresh-1"
         assert before + 300 <= client.expires_at <= time.time() + 300
 
-    @patch("src.network.supabase_auth.requests.post")
+    @patch("src.network.cloud_auth.requests.post")
     def test_refresh_rotates_refresh_token(self, post: Mock) -> None:
         response = Mock()
         response.json.return_value = {
@@ -58,7 +58,7 @@ class TestWeighbridgeAuthClient:
         assert client.access_token == "access-2"
         assert client.refresh_token == "refresh-2"
 
-    @patch("src.network.supabase_auth.requests.post")
+    @patch("src.network.cloud_auth.requests.post")
     def test_refresh_falls_back_to_login(self, post: Mock) -> None:
         refresh_response = Mock()
         refresh_response.raise_for_status.side_effect = requests.HTTPError("expired")
@@ -78,7 +78,7 @@ class TestWeighbridgeAuthClient:
         assert client.refresh_token == "refresh-login"
         assert post.call_count == 2
 
-    @patch("src.network.supabase_auth.requests.post")
+    @patch("src.network.cloud_auth.requests.post")
     def test_post_entry_refreshes_and_retries_once_after_401(self, post: Mock) -> None:
         unauthorized = Mock(status_code=401)
         accepted = Mock(status_code=201)

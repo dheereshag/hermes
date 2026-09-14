@@ -39,7 +39,7 @@ class ScaleStabilityMachine:
         if abs(parsed_weight - self._last_printed_weight) >= 0.1:
             logger.info(
                 f"[Scale] Parsed weight: {parsed_weight:.3f} "
-                f"(Threshold: {config.supabase_weight_threshold:.1f})"
+                f"(Threshold: {config.weight_threshold:.1f})"
             )
             self._last_printed_weight = parsed_weight
 
@@ -54,7 +54,7 @@ class ScaleStabilityMachine:
                 session_manager.reset_session()
             return True
 
-        if parsed_weight < config.supabase_weight_threshold:
+        if parsed_weight < config.weight_threshold:
             self._reset_candidate_state()
             session_manager.reset_session()
             return True
@@ -105,8 +105,8 @@ class ScaleStabilityMachine:
 
     def _trigger_upload(self, session_package: dict):
         # Import here to avoid circular imports
-        from src.network.supabase_post import post_to_supabase
-        post_to_supabase(session_package)
+        from src.network.cloud_post import post_to_cloud
+        post_to_cloud(session_package)
 
     def reset(self):
         """Manually reset the state machine."""

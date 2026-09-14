@@ -6,8 +6,8 @@ from typing import Any
 import requests
 
 from src.config.config_manager import config
-from src.network.supabase_auth import ensure_valid_auth, refresh_gluvok_token
-from src.network.supabase_client import GLUVOK_BASE_URL, auth_state
+from src.network.cloud_auth import ensure_valid_auth, refresh_gluvok_token
+from src.network.cloud_client import GLUVOK_BASE_URL, auth_state
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +60,14 @@ def _build_entry_payload(session_payload: dict[str, Any]) -> tuple[dict[str, Any
     payload = {
         "detected_vehicle_number": detected_plate,
         "weight": round(weight_val, 3),
-        "center_id": config.supabase_center_id,
+        "center_id": config.center_id,
         "status": "pending",
         "images": images_list,
     }
     return payload, images_list
 
 
-def post_to_supabase(session_payload: dict[str, Any], is_retry: bool = False) -> None:
+def post_to_cloud(session_payload: dict[str, Any], is_retry: bool = False) -> None:
     """
     Submits vehicle weighment session to Gluvok API (/api/entries).
     Handles Bearer token auth, dynamic token refresh on 401, and direct Base64 image payloads.
@@ -109,7 +109,7 @@ def post_to_supabase(session_payload: dict[str, Any], is_retry: bool = False) ->
         elif response.status_code == 401 and not is_retry:
             logger.warning("[Gluvok API] Access token expired (401). Refreshing token and retrying entry POST...")
             if refresh_gluvok_token():
-                post_to_supabase(session_payload, is_retry=True)
+                post_to_cloud(session_payload, is_retry=True)
             else:
                 logger.error("[Gluvok API] Token refresh failed on 401 response.")
                 try:

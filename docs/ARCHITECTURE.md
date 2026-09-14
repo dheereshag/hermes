@@ -71,10 +71,10 @@ graph TD
   - Assembles the final session package containing stable weight, highest-voted plate, and base64 images.
 
 ### 2.3 Network & Cloud Subsystem (`src/network/`)
-- **`supabase_auth.py` & `supabase_client.py`**:
+- **`cloud_auth.py` & `cloud_client.py`**:
   - Manages JWT device authentication against the Gluvok REST API (`/api/auth/login` and `/api/auth/refresh`).
   - Tracks token expiry and automatically attempts token refresh or re-login upon 401 Unauthorized responses.
-- **`supabase_post.py`**:
+- **`cloud_post.py`**:
   - Validates and sanitizes license plate numbers against Indian registration number patterns (`INDIAN_PLATE_REGEX`).
   - Posts weighment session data and base64-encoded snapshot images directly to `/api/entries`.
 - **`wifi_manager.py`**:

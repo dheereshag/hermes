@@ -157,7 +157,7 @@ class WeighbridgeSessionManager:
             if self._cam1_plates:
                 final_anpr_plate = get_highest_frequency_plate(self._cam1_plates)
             elif self._cam1_statuses:
-                # Forward the exact Argus error/status code as the plate value to Supabase
+                # Forward the exact Argus error/status code as the plate value to Gluvok Cloud API
                 final_anpr_plate = get_highest_frequency_plate(self._cam1_statuses)
             else:
                 final_anpr_plate = "NO_PLATE_DETECTED"

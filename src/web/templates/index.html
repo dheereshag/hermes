@@ -13,122 +13,59 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-          },
-          colors: {
-            border: 'hsl(var(--border))',
-            input: 'hsl(var(--input))',
-            ring: 'hsl(var(--ring))',
-            background: 'hsl(var(--background))',
-            foreground: 'hsl(var(--foreground))',
-            primary: {
-              DEFAULT: 'hsl(var(--primary))',
-              foreground: 'hsl(var(--primary-foreground))',
-            },
-            secondary: {
-              DEFAULT: 'hsl(var(--secondary))',
-              foreground: 'hsl(var(--secondary-foreground))',
-            },
-            destructive: {
-              DEFAULT: 'hsl(var(--destructive))',
-              foreground: 'hsl(var(--destructive-foreground))',
-            },
-            muted: {
-              DEFAULT: 'hsl(var(--muted))',
-              foreground: 'hsl(var(--muted-foreground))',
-            },
-            accent: {
-              DEFAULT: 'hsl(var(--accent))',
-              foreground: 'hsl(var(--accent-foreground))',
-            },
-            popover: {
-              DEFAULT: 'hsl(var(--popover))',
-              foreground: 'hsl(var(--popover-foreground))',
-            },
-            card: {
-              DEFAULT: 'hsl(var(--card))',
-              foreground: 'hsl(var(--card-foreground))',
-            },
-            sidebar: {
-              DEFAULT: 'hsl(var(--sidebar-background))',
-              foreground: 'hsl(var(--sidebar-foreground))',
-              primary: 'hsl(var(--sidebar-primary))',
-              'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-              accent: 'hsl(var(--sidebar-accent))',
-              'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-              border: 'hsl(var(--sidebar-border))',
-              ring: 'hsl(var(--sidebar-ring))',
-            }
-          },
-          borderRadius: {
-            lg: 'var(--radius)',
-            md: 'calc(var(--radius) - 2px)',
-            sm: 'calc(var(--radius) - 4px)',
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind CSS v4 Browser CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
-  <!-- Shadcn Zinc Dark Theme CSS Variables -->
-  <style>
-    :root {
-      --background: 240 10% 3.9%;
-      --foreground: 0 0% 98%;
-      --card: 240 10% 3.9%;
-      --card-foreground: 0 0% 98%;
-      --popover: 240 10% 3.9%;
-      --popover-foreground: 0 0% 98%;
-      --primary: 0 0% 98%;
-      --primary-foreground: 240 5.9% 10%;
-      --secondary: 240 3.7% 15.9%;
-      --secondary-foreground: 0 0% 98%;
-      --muted: 240 3.7% 15.9%;
-      --muted-foreground: 240 5% 64.9%;
-      --accent: 240 3.7% 15.9%;
-      --accent-foreground: 0 0% 98%;
-      --destructive: 0 62.8% 30.6%;
-      --destructive-foreground: 0 0% 98%;
-      --border: 240 3.7% 15.9%;
-      --input: 240 3.7% 15.9%;
-      --ring: 240 4.9% 83.9%;
-      --radius: 0.75rem;
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-      /* Shadcn Sidebar 13 tokens */
-      --sidebar-background: 240 5.9% 6%;
-      --sidebar-foreground: 240 4.8% 95.9%;
-      --sidebar-primary: 240 5.9% 10%;
-      --sidebar-primary-foreground: 0 0% 98%;
-      --sidebar-accent: 240 3.7% 15.9%;
-      --sidebar-accent-foreground: 240 4.8% 95.9%;
-      --sidebar-border: 240 3.7% 15.9%;
-      --sidebar-ring: 240 4.9% 83.9%;
+      --color-background: #09090b;
+      --color-foreground: #fafafa;
+      --color-card: #09090b;
+      --color-card-foreground: #fafafa;
+      --color-popover: #09090b;
+      --color-popover-foreground: #fafafa;
+      --color-primary: #fafafa;
+      --color-primary-foreground: #09090b;
+      --color-secondary: #27272a;
+      --color-secondary-foreground: #fafafa;
+      --color-muted: #27272a;
+      --color-muted-foreground: #a1a1aa;
+      --color-accent: #27272a;
+      --color-accent-foreground: #fafafa;
+      --color-destructive: #ef4444;
+      --color-destructive-foreground: #fafafa;
+      --color-border: #27272a;
+      --color-input: #27272a;
+      --color-ring: #d4d4d8;
+
+      --color-sidebar: #09090b;
+      --color-sidebar-foreground: #f4f4f5;
+      --color-sidebar-primary: #18181b;
+      --color-sidebar-primary-foreground: #fafafa;
+      --color-sidebar-accent: #27272a;
+      --color-sidebar-accent-foreground: #fafafa;
+      --color-sidebar-border: #27272a;
+      --color-sidebar-ring: #d4d4d8;
     }
 
     * { box-sizing: border-box; }
     body {
-      background-color: hsl(var(--background));
-      color: hsl(var(--foreground));
+      background-color: #09090b;
+      color: #fafafa;
       font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
       margin: 0;
       padding: 0;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Custom scrollbar matching shadcn */
+    /* Custom scrollbar */
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
     /* Transitions */
     .sidebar-transition {
@@ -143,7 +80,7 @@
   <div id="sidebar-backdrop" onclick="toggleMobileSidebar()" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm hidden lg:hidden"></div>
 
   <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <!-- SHADCN SIDEBAR-13 COMPONENT                                           -->
+  <!-- SIDEBAR NAVIGATION COMPONENT                                           -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <aside id="main-sidebar" class="sidebar-transition fixed lg:sticky top-0 z-50 h-screen w-64 flex flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground -translate-x-full lg:translate-x-0 flex-shrink-0">
     
@@ -534,11 +471,11 @@
       </div>
 
       <!-- ══════════════════════════════════════════════════════════════════ -->
-      <!-- VIEW 7: SYSTEM CONFIGURATION (Exact Shadcn Sidebar-13 Layout)      -->
+      <!-- VIEW 7: SYSTEM CONFIGURATION                                       -->
       <!-- ══════════════════════════════════════════════════════════════════ -->
       <div id="view-config" class="hidden space-y-6 relative">
 
-        <!-- Shadcn Dialog Modal Overlay (When Locked) -->
+        <!-- Security Dialog Modal Overlay (When Locked) -->
         <div id="config-login-overlay" class="absolute inset-0 z-40 flex items-center justify-center p-4" style="min-height:550px;">
           <div class="absolute inset-0 bg-black/75 backdrop-blur-md rounded-xl"></div>
           <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl space-y-6">
@@ -1048,7 +985,7 @@
           document.getElementById("ov-wifi-ssid").textContent = data.config.wifi_ssid || "Setup Portal";
         }
 
-        // Argus & Supabase
+        // Argus & Cloud
         const argusBadge = document.getElementById("ov-argus-badge");
         if (data.argus && data.argus.online) {
           argusBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";

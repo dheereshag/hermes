@@ -5,7 +5,7 @@ Core weighment indicator and ANPR multi-camera capture application.
 
 Module map:
   src/config/    — JSON-backed settings manager & camera configurations
-  src/network/   — Supabase login, profile resolver, payload POST
+  src/network/   — Cloud login, profile resolver, payload POST
   src/scale/     — PySerial UART stream reader, 10s stability state machine
   src/camera/    — Multi-camera snapshots, ANPR client, session lifecycle
 """
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # ── Import core modules ───────────────────────────────────────────────────────
 from src.camera.session_manager import session_manager
 from src.config.config_manager import config
-from src.network.supabase_auth import login_to_supabase
+from src.network.cloud_auth import login_to_cloud
 from src.network.wifi_manager import start_wifi_watchdog, stop_wifi_watchdog
 from src.scale.scale_stability import scale_state_machine
 from src.scale.scale_uart import get_uart_reader
@@ -67,16 +67,16 @@ def setup():
 
     # Log active settings from config.json
     logger.info(
-        f"[Config] Email: '{config.supabase_email}' | "
-        f"Center ID: {config.supabase_center_id} | "
-        f"Threshold: {config.supabase_weight_threshold:.1f} kg"
+        f"[Config] Email: '{config.api_email}' | "
+        f"Center ID: {config.center_id} | "
+        f"Threshold: {config.weight_threshold:.1f} kg"
     )
 
-    # Authenticate with Supabase backend
-    if config.supabase_email and config.supabase_password:
-        login_to_supabase()
+    # Authenticate with Gluvok Cloud backend
+    if config.api_email and config.api_password:
+        login_to_cloud()
     else:
-        logger.info("[Auth] Supabase credentials not set in config.json.")
+        logger.info("[Auth] Cloud credentials not set in config.json.")
 
 
 def loop():

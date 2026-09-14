@@ -1,11 +1,11 @@
-from src.network.supabase_auth import (
+from src.network.cloud_auth import (
     WeighbridgeAuthClient,
     ensure_valid_auth,
-    login_to_supabase,
+    login_to_cloud,
     refresh_gluvok_token,
 )
-from src.network.supabase_client import GLUVOK_BASE_URL, auth_state
-from src.network.supabase_post import post_to_supabase
+from src.network.cloud_client import GLUVOK_BASE_URL, auth_state
+from src.network.cloud_post import post_to_cloud
 from src.network.wifi_manager import (
     connect_to_wifi,
     is_hotspot_active,
@@ -24,8 +24,8 @@ __all__ = [
     "ensure_valid_auth",
     "is_hotspot_active",
     "is_wifi_connected",
-    "login_to_supabase",
-    "post_to_supabase",
+    "login_to_cloud",
+    "post_to_cloud",
     "refresh_gluvok_token",
     "start_emergency_hotspot",
     "start_wifi_watchdog",

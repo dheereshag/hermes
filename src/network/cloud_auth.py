@@ -4,7 +4,7 @@ import time
 import requests
 
 from src.config.config_manager import config
-from src.network.supabase_client import GLUVOK_BASE_URL, auth_state
+from src.network.cloud_client import GLUVOK_BASE_URL, auth_state
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,8 @@ class WeighbridgeAuthClient:
 def _auth_client() -> WeighbridgeAuthClient:
     return WeighbridgeAuthClient(
         GLUVOK_BASE_URL,
-        config.supabase_email.strip(),
-        config.supabase_password,
+        config.api_email.strip(),
+        config.api_password,
     )
 
 
@@ -95,12 +95,12 @@ def _record_auth_failure(message: str) -> None:
         pass
 
 
-def login_to_supabase() -> bool:
+def login_to_cloud() -> bool:
     """Authenticate the configured device account against the Gluvok API."""
     client = _auth_client()
     if not client.username or not client.password:
         logger.warning(
-            "[Auth] Missing username or password in config.json (sb_email / sb_pass)."
+            "[Auth] Missing username or password in config.json (api_email / api_password)."
         )
         _record_auth_failure("Missing device credentials in config.json.")
         return False
@@ -133,7 +133,7 @@ def refresh_gluvok_token() -> bool:
     """
     if not auth_state.refresh_token:
         logger.warning("[Auth] No refresh token available. Executing full login...")
-        return login_to_supabase()
+        return login_to_cloud()
 
     logger.info("[Auth] Attempting access token refresh via Gluvok API...")
     client = _auth_client()
@@ -145,7 +145,7 @@ def refresh_gluvok_token() -> bool:
         logger.error(f"[Auth] Exception during token refresh: {error}")
         auth_state.access_token = ""
         auth_state.refresh_token = ""
-        return login_to_supabase()
+        return login_to_cloud()
 
 
 def ensure_valid_auth() -> bool:
@@ -156,4 +156,4 @@ def ensure_valid_auth() -> bool:
     if auth_state.refresh_token:
         return refresh_gluvok_token()
 
-    return login_to_supabase()
+    return login_to_cloud()

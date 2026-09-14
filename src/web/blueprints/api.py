@@ -96,7 +96,7 @@ def login():
 def status():
     """Returns complete real-time operational telemetry snapshot."""
     from src.camera.anpr_client import resolve_anpr_endpoint
-    from src.network.supabase_client import auth_state
+    from src.network.cloud_client import auth_state
     from src.network.wifi_manager import is_hotspot_active, is_wifi_connected
     from src.scale.scale_stability import get_current_weight, get_scale_state
 
@@ -115,8 +115,8 @@ def status():
             "url": target_argus_url,
             "online": argus_online,
         },
-        "supabase": {
-            "center_id": config.supabase_center_id,
+        "cloud": {
+            "center_id": config.center_id,
             "authenticated": auth_state.is_token_valid,
         },
         "cameras": {
@@ -129,8 +129,8 @@ def status():
         },
         "config": {
             "wifi_ssid": config.wifi_ssid,
-            "operator_email": config.supabase_email,
-            "min_weight": config.supabase_weight_threshold,
+            "operator_email": config.api_email,
+            "min_weight": config.weight_threshold,
             "serial_port": config.serial_port,
             "serial_baudrate": config.serial_baudrate,
             "anpr_camera_url": config.anpr_camera_url,
@@ -147,7 +147,7 @@ def status():
 def get_config():
     """Returns current system configuration values."""
     return jsonify({
-        "min_weight": config.supabase_weight_threshold,
+        "min_weight": config.weight_threshold,
         "serial_port": config.serial_port,
         "serial_baudrate": config.serial_baudrate,
         "anpr_camera_url": config.anpr_camera_url,

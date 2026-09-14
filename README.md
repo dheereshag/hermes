@@ -22,7 +22,7 @@ hermes/
 │   ├── test_anpr_client.py    # ANPR client and plate voting tests
 │   ├── test_scale_uart.py     # Scale UART parser unit tests
 │   ├── test_session_fallback.py # Weighbridge session fallback and error propagation tests
-│   ├── test_supabase_auth.py  # Gluvok API authentication and token refresh tests
+│   ├── test_cloud_auth.py     # Gluvok API authentication and token refresh tests
 │   ├── test_web_server.py     # Fallback web dashboard & REST API tests
 │   └── test_wifi_manager.py   # Wi-Fi watchdog & emergency hotspot tests
 └── src/
@@ -38,9 +38,9 @@ hermes/
     │   ├── anpr_client.py     # ANPR server client & plate voting algorithm
     │   └── session_manager.py # Weighbridge session lifecycle & image packaging
     ├── network/
-    │   ├── supabase_client.py # Gluvok base URL and token state singleton
-    │   ├── supabase_auth.py   # Device JWT login & token refresh manager
-    │   ├── supabase_post.py   # Weighment payload & base64 image uploader
+    │   ├── cloud_client.py    # Gluvok base URL and token state singleton
+    │   ├── cloud_auth.py      # Device JWT login & token refresh manager
+    │   ├── cloud_post.py      # Weighment payload & base64 image uploader
     │   └── wifi_manager.py    # Automatic Wi-Fi watchdog & emergency hotspot monitor
     └── web/
         ├── __init__.py        # Web subpackage exports
@@ -65,7 +65,7 @@ hermes/
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
-- **Supabase / Gluvok Cloud Integration**: Authenticates with Gluvok Auth REST API and posts complete weighment records with base64 images.
+- **Gluvok Cloud API Integration**: Authenticates with Gluvok Auth REST API and posts complete weighment records with base64 images.
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` (with blueprints for REST APIs and views) for live telemetry, error monitoring, and runtime configuration.
 - **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
 
