@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import requests
 
-from src.config.camera_config import ANPR_SERVER_TIMEOUT, ANPR_SERVER_URL
+from src.config.camera_config import ANPR_SERVER_TIMEOUT, get_anpr_server_url
 from src.config.config_manager import config
 
 logger = logging.getLogger(__name__)
@@ -15,12 +15,77 @@ logger = logging.getLogger(__name__)
 
 def resolve_anpr_endpoint(url: str | None = None) -> str:
     """Resolves ANPR server URL, replacing 0.0.0.0 with 127.0.0.1 and appending /recognize if omitted."""
-    raw = (url or config.anpr_server_url or ANPR_SERVER_URL or "http://127.0.0.1:8000/recognize").strip()
+    raw = (url or config.anpr_server_url or get_anpr_server_url()).strip()
     raw = raw.replace("://0.0.0.0", "://127.0.0.1")
     raw = raw.rstrip("/")
     if not raw.endswith("/recognize"):
         raw = f"{raw}/recognize"
     return raw
+
+
+def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
+    """Extract plate string or status code from Argus / generic JSON response."""
+    results = data.get("results")
+    if isinstance(results, list):
+        for item in results:
+            if isinstance(item, dict):
+                plate_val = item.get("plate")
+                if plate_val and isinstance(plate_val, str) and plate_val.strip() and plate_val.strip().upper() != "N/A":
+                    plate_clean = plate_val.strip().upper()
+                    exec_time = data.get("execution_time_ms", "N/A")
+                    provider = data.get("provider", "unknown")
+                    vtype = data.get("vehicle_type") or "vehicle"
+                    logger.info(
+                        f"[ANPR] Argus recognized plate: '{plate_clean}' "
+                        f"({vtype}, provider={provider}, {exec_time}ms)"
+                    )
+                    return plate_clean, "SUCCESS"
+
+    for key in ("plate", "number_plate", "plate_number", "text", "result"):
+        flat_val = data.get(key)
+        if flat_val and isinstance(flat_val, str) and flat_val.strip() and flat_val.strip().upper() != "N/A":
+            plate_clean = flat_val.strip().upper()
+            logger.info(f"[ANPR] Server returned plate: '{plate_clean}' (key='{key}')")
+            return plate_clean, "SUCCESS"
+
+    raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
+    if data.get("rejected"):
+        status_msg = data.get("status_message", "Pre-screening rejected frame")
+        logger.info(f"[ANPR] Argus pre-screening rejected frame: {status_msg} (status: {raw_status})")
+        return None, raw_status
+
+    if data.get("success") is False:
+        status_msg = data.get("status_message", "No plate detected")
+        logger.info(f"[ANPR] Argus reported: {status_msg} (status: {raw_status})")
+        return None, raw_status
+
+    if "status" in data:
+        return None, raw_status
+
+    return None, None
+
+
+def _parse_anpr_response(response: requests.Response) -> tuple[str | None, str]:
+    """Parses HTTP response body from ANPR microservice."""
+    if response.status_code in (200, 201):
+        try:
+            data = response.json()
+            if isinstance(data, dict):
+                plate, status = _extract_plate_from_dict(data)
+                if status is not None:
+                    return plate, status
+            elif isinstance(data, str) and data.strip():
+                return data.strip().upper(), "SUCCESS"
+        except (ValueError, KeyError, json.JSONDecodeError, TypeError) as parse_err:
+            text = response.text.strip().upper()
+            if text and text != "N/A":
+                logger.info(f"[ANPR] Server returned text response: '{text}'")
+                return text, "SUCCESS"
+            logger.warning(f"[ANPR] Failed to parse server response: {parse_err}")
+
+    error_code = f"ANPR_HTTP_{response.status_code}"
+    logger.warning(f"[ANPR] Server POST status {response.status_code}: {response.text[:120]}")
+    return None, error_code
 
 
 def send_frame_to_anpr_server(
@@ -31,78 +96,16 @@ def send_frame_to_anpr_server(
     """
     Sends raw JPEG image bytes to the Argus ANPR FastAPI microservice (/recognize).
     Returns a tuple of (plate_string | None, status_code).
-    If recognized: (plate, "SUCCESS")
-    If error/rejected: (None, error_or_status_code)
     """
     if not image_bytes:
         return None, "EMPTY_IMAGE"
 
-    # Resolve target URL: ensures 127.0.0.1 and /recognize path are correctly formatted
     target_url = resolve_anpr_endpoint(server_url)
 
     try:
-        # Argus FastAPI expects the image under the multipart 'file' field
         files = {"file": ("frame.jpg", image_bytes, "image/jpeg")}
         response = requests.post(target_url, files=files, timeout=timeout)
-
-        if response.status_code in [200, 201]:
-            try:
-                data = response.json()
-                if isinstance(data, dict):
-                    # 1. Handle Argus RecognitionResponse schema (list of PlateResult objects)
-                    results = data.get("results")
-                    if isinstance(results, list):
-                        for item in results:
-                            if isinstance(item, dict):
-                                plate_val = item.get("plate")
-                                if plate_val and isinstance(plate_val, str) and plate_val.strip() and plate_val.strip().upper() != "N/A":
-                                    plate_clean = plate_val.strip().upper()
-                                    exec_time = data.get("execution_time_ms", "N/A")
-                                    provider = data.get("provider", "unknown")
-                                    vtype = data.get("vehicle_type") or "vehicle"
-                                    logger.info(
-                                        f"[ANPR] Argus recognized plate: '{plate_clean}' "
-                                        f"({vtype}, provider={provider}, {exec_time}ms)"
-                                    )
-                                    return plate_clean, "SUCCESS"
-
-                    # 2. Fallback for flat JSON responses
-                    for key in ("plate", "number_plate", "plate_number", "text", "result"):
-                        flat_val = data.get(key)
-                        if flat_val and isinstance(flat_val, str) and flat_val.strip() and flat_val.strip().upper() != "N/A":
-                            plate_clean = flat_val.strip().upper()
-                            logger.info(f"[ANPR] Server returned plate: '{plate_clean}' (key='{key}')")
-                            return plate_clean, "SUCCESS"
-
-                    # 3. Check if frame was rejected during pre-screening or no plate detected
-                    raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
-                    if data.get("rejected"):
-                        status_msg = data.get("status_message", "Pre-screening rejected frame")
-                        logger.info(f"[ANPR] Argus pre-screening rejected frame: {status_msg} (status: {raw_status})")
-                        return None, raw_status
-
-                    if data.get("success") is False:
-                        status_msg = data.get("status_message", "No plate detected")
-                        logger.info(f"[ANPR] Argus reported: {status_msg} (status: {raw_status})")
-                        return None, raw_status
-
-                    if "status" in data:
-                        return None, raw_status
-
-                elif isinstance(data, str) and data.strip():
-                    return data.strip().upper(), "SUCCESS"
-
-            except (ValueError, KeyError, json.JSONDecodeError, TypeError) as parse_err:
-                # If plain text response
-                text = response.text.strip().upper()
-                if text and text != "N/A":
-                    logger.info(f"[ANPR] Server returned text response: '{text}'")
-                    return text, "SUCCESS"
-                logger.warning(f"[ANPR] Failed to parse server response: {parse_err}")
-
-        error_code = f"ANPR_HTTP_{response.status_code}"
-        logger.warning(f"[ANPR] Server POST status {response.status_code}: {response.text[:120]}")
-        return None, error_code
+        return _parse_anpr_response(response)
     except requests.exceptions.Timeout:
         logger.warning(f"[ANPR] Timeout ({timeout}s) contacting ANPR server at {target_url}")
         return None, "ANPR_TIMEOUT"

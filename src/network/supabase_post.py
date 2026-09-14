@@ -37,7 +37,37 @@ def sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]:
     return raw, fallback_plate
 
 
-def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = False):
+def _build_entry_payload(session_payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Builds the API entry payload and base64 images list from session dictionary."""
+    images_list: list[str] = []
+    weight_val = float(session_payload.get("weight", 0.0))
+    raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
+    detected_plate, _ = sanitize_vehicle_number(raw_plate)
+
+    cam1_bytes = session_payload.get("cam1_final_image")
+    if cam1_bytes:
+        b64_str = base64.b64encode(cam1_bytes).decode("utf-8")
+        images_list.append(f"data:image/jpeg;base64,{b64_str}")
+
+    aux_images = session_payload.get("auxiliary_images", {})
+    if isinstance(aux_images, dict):
+        for cam_idx in sorted(aux_images.keys()):
+            img_bytes = aux_images[cam_idx]
+            if img_bytes:
+                b64_aux = base64.b64encode(img_bytes).decode("utf-8")
+                images_list.append(f"data:image/jpeg;base64,{b64_aux}")
+
+    payload = {
+        "detected_vehicle_number": detected_plate,
+        "weight": round(weight_val, 3),
+        "center_id": config.supabase_center_id,
+        "status": "pending",
+        "images": images_list,
+    }
+    return payload, images_list
+
+
+def post_to_supabase(session_payload: dict[str, Any], is_retry: bool = False) -> None:
     """
     Submits vehicle weighment session to Gluvok API (/api/entries).
     Handles Bearer token auth, dynamic token refresh on 401, and direct Base64 image payloads.
@@ -49,44 +79,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
     entries_url = f"{GLUVOK_BASE_URL}/api/entries"
     logger.info(f"[Gluvok API] Transmitting weighment entry to: {entries_url}")
 
-    images_list: list[str] = []
-
-    if isinstance(session_payload, dict):
-        weight_val = float(session_payload.get("weight", 0.0))
-        raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
-        detected_plate, _ = sanitize_vehicle_number(raw_plate)
-
-        # 1. Primary Camera 1 image (Data URI)
-        cam1_bytes = session_payload.get("cam1_final_image")
-        if cam1_bytes:
-            b64_str = base64.b64encode(cam1_bytes).decode("utf-8")
-            images_list.append(f"data:image/jpeg;base64,{b64_str}")
-
-        # 2. Auxiliary overview camera images (Data URIs)
-        aux_images = session_payload.get("auxiliary_images", {})
-        if isinstance(aux_images, dict):
-            for cam_idx in sorted(aux_images.keys()):
-                img_bytes = aux_images[cam_idx]
-                if img_bytes:
-                    b64_aux = base64.b64encode(img_bytes).decode("utf-8")
-                    images_list.append(f"data:image/jpeg;base64,{b64_aux}")
-
-        payload = {
-            "detected_vehicle_number": detected_plate,
-            "weight": round(weight_val, 3),
-            "center_id": config.supabase_center_id,
-            "status": "pending",
-            "images": images_list,
-        }
-    else:
-        weight_val = float(session_payload)
-        payload = {
-            "detected_vehicle_number": "NO_PLATE_DETECTED",
-            "weight": round(weight_val, 3),
-            "center_id": config.supabase_center_id,
-            "status": "pending",
-            "images": [],
-        }
+    payload, images_list = _build_entry_payload(session_payload)
 
     logger.info(
         f"[Gluvok API] Transmitting payload: Detected Vehicle='{payload.get('detected_vehicle_number')}', "
@@ -96,7 +89,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {auth_state.access_token}",
-        "Connection": "close"
+        "Connection": "close",
     }
 
     try:
@@ -109,7 +102,7 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
                 from src.web.server import record_system_event
                 record_system_event(
                     "CLOUD",
-                    f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload['weight']} kg"
+                    f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload['weight']} kg",
                 )
             except (ImportError, AttributeError):
                 pass
@@ -142,8 +135,6 @@ def post_to_supabase(session_payload: float | dict[str, Any], is_retry: bool = F
         except (ImportError, AttributeError):
             pass
     finally:
-        # Clear base64 image strings from RAM immediately
-        if isinstance(session_payload, dict):
-            session_payload.clear()
+        session_payload.clear()
         payload.clear()
         images_list.clear()

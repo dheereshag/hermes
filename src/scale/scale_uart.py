@@ -29,13 +29,6 @@ def get_current_serial_port() -> str:
 def get_current_baudrate() -> int:
     return app_config.serial_baudrate or 1200
 
-# Dynamic module-level properties for backward compatibility
-def __getattr__(name: str):
-    if name == "SCALE_SERIAL_PORT":
-        return get_current_serial_port()
-    elif name == "SCALE_BAUD_RATE":
-        return get_current_baudrate()
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 SCALE_TIMEOUT = 0.05  # 50ms non-blocking read timeout
 

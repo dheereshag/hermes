@@ -14,9 +14,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
 from src.config.camera_config import (
-    AUXILIARY_CAMERA_URLS,
     CAMERA_TIMEOUT,
     MAX_PARALLEL_CAMERA_WORKERS,
+    get_auxiliary_camera_urls,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def capture_auxiliary_snapshots(
     Concurrently captures snapshot images from all auxiliary cameras (Cameras 2 ... N).
     Returns a dict mapping camera_index (2, 3, ...) to raw image bytes or None.
     """
-    urls = camera_urls if camera_urls is not None else AUXILIARY_CAMERA_URLS
+    urls = camera_urls if camera_urls is not None else get_auxiliary_camera_urls()
     results: dict[int, bytes | None] = {}
 
     if not urls:

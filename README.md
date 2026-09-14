@@ -1,34 +1,51 @@
-# Gluvok Weighment & ANPR Integration System
+# Gluvok Weighment & ANPR Integration System (Hermes)
 
-An industrial weighing bridge integration service designed to bridge weighing scale indicators, multi-camera capture, ANPR (Automatic Number Plate Recognition) voting, and **Cloud Supabase** database logging.
+An industrial weighing bridge integration controller designed to bridge scale serial indicators, automated multi-camera capture, Argus ANPR (Automatic Number Plate Recognition) voting, local emergency Wi-Fi diagnostics, and **Gluvok Cloud API** weighment logging.
 
 ---
 
 ## 🏗️ Project Architecture & Folder Structure
 
+Detailed architectural diagrams and sequence flows can be found in [`docs/ARCHITECTURE.md`](file:///Users/d/Downloads/hermes/docs/ARCHITECTURE.md).
+
 ```
-hermes-camera2/
+hermes/
 ├── main.py                    # Application entry point & lifecycle loop
 ├── config.json                # Local persistent configuration settings
-├── requirements.txt           # Python dependencies
-├── README.md
+├── pyproject.toml             # Project definition, dependencies, and test config (uv-managed)
+├── uv.lock                    # Dependency lockfile
+├── README.md                  # Project overview and quickstart
+├── AGENTS.md                  # AI agent engineering and code quality guidelines
+├── docs/
+│   └── ARCHITECTURE.md        # Technical architecture, protocol, and data flow documentation
 ├── tests/
-│   └── test_scale_uart.py     # Scale UART parser unit tests
+│   ├── test_anpr_client.py    # ANPR client and plate voting tests
+│   ├── test_scale_uart.py     # Scale UART parser unit tests
+│   ├── test_session_fallback.py # Weighbridge session fallback and error propagation tests
+│   ├── test_supabase_auth.py  # Gluvok API authentication and token refresh tests
+│   ├── test_web_server.py     # Fallback web dashboard & REST API tests
+│   └── test_wifi_manager.py   # Wi-Fi watchdog & emergency hotspot tests
 └── src/
     ├── config/
     │   ├── config_manager.py  # JSON-backed configuration manager
-    │   └── camera_config.py   # IP camera URLs, ANPR server URL, and timers
+    │   └── camera_config.py   # Dynamic camera getters, ANPR server URL, and timers
     ├── scale/
-    │   ├── scale_uart.py      # UART serial stream reader & buffer parser
+    │   ├── scale_uart.py      # UART serial stream reader & packet buffer parser
     │   └── scale_stability.py # 10s continuous weight stability state machine
     ├── camera/
+    │   ├── __init__.py        # Camera subpackage exports
     │   ├── camera_manager.py  # HTTP snapshot / RTSP frame grabber
     │   ├── anpr_client.py     # ANPR server client & plate voting algorithm
     │   └── session_manager.py # Weighbridge session lifecycle & image packaging
-    └── network/
-        ├── supabase_client.py # Supabase URL and Auth token storage
-        ├── supabase_auth.py   # Operator JWT login & profile resolver
-        └── supabase_post.py   # Weighment payload & base64 image uploader
+    ├── network/
+    │   ├── supabase_client.py # Gluvok base URL and token state singleton
+    │   ├── supabase_auth.py   # Device JWT login & token refresh manager
+    │   ├── supabase_post.py   # Weighment payload & base64 image uploader
+    │   └── wifi_manager.py    # Automatic Wi-Fi watchdog & emergency hotspot monitor
+    └── web/
+        ├── server.py          # Embedded diagnostics HTTP server (:8080) & REST APIs
+        └── templates/
+            └── index.html     # Real-time Tailwind CSS diagnostics & configuration web UI
 ```
 
 ---
@@ -39,30 +56,38 @@ hermes-camera2/
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
-- **Supabase Cloud Integration**: Authenticates with Supabase Auth REST API and posts complete weighment records with base64 images.
+- **Supabase / Gluvok Cloud Integration**: Authenticates with Gluvok Auth REST API and posts complete weighment records with base64 images.
+- **Web Diagnostics Dashboard**: Lightweight local HTTP console on port `8080` for live telemetry, error monitoring, and runtime configuration.
+- **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
 
 ---
 
 ## 🚀 Running the Application on Raspberry Pi
 
 ### 1. Install Dependencies
+Ensure [`uv`](https://docs.astral.sh/uv/) is installed, then sync project dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-### 2. Configure ANPR & Cloud Settings
-Set your configuration either via environment variables or in `config.json`:
-- `ANPR_SERVER_URL`: URL to Argus FastAPI endpoint (defaults to `http://127.0.0.1:8000/recognize`).
-- `ANPR_CAMERA_URL`: Snapshot URL of IP Camera 1.
-- `ANPR_SERVER_TIMEOUT`: Timeout in seconds (default `6.0s`).
+### 2. Configure System Settings
+Configuration is stored in `config.json` and can be adjusted directly or via the local web dashboard:
+- `anpr_server_url`: URL to Argus FastAPI endpoint (defaults to `http://127.0.0.1:8000/recognize`).
+- `anpr_camera_url`: Snapshot URL of IP Camera 1.
+- `auxiliary_camera_urls`: List of overview camera snapshot URLs.
+- `serial_port`: Path to UART port (default `/dev/ttyAMA0`).
+- `serial_baudrate`: Baud rate (default `1200`).
+- `min_weight`: Minimum threshold in kg to trigger a weighing session (default `50.0`).
 
-### 3. Run Tests
+### 3. Run Quality Gates & Tests
+Run all verification suites:
 ```bash
-PYTHONPATH=. python3 -m unittest discover tests
+uv run ruff check --fix
+uv run ty check
+uv run pytest
 ```
 
 ### 4. Start Application
 ```bash
-python3 main.py
+uv run python main.py
 ```
-

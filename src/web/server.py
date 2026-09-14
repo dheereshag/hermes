@@ -386,94 +386,110 @@ class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
 
         try:
             data = json.loads(post_body.decode("utf-8"))
-
-            min_weight = data.get("min_weight")
-            serial_port = data.get("serial_port")
-            serial_baudrate = data.get("serial_baudrate")
-            anpr_camera_url = data.get("anpr_camera_url")
-            auxiliary_camera_urls = data.get("auxiliary_camera_urls")
-            anpr_server_url = data.get("anpr_server_url")
-
-            # ── Strict Input Validation & Sanitization ─────────────────────
-            if min_weight is not None:
-                try:
-                    min_weight = float(min_weight)
-                    if min_weight < 0 or min_weight > 100000.0:
-                        self._send_json_response({"success": False, "error": "Threshold weight must be between 0 and 100,000 kg."}, 400)
-                        return
-                except (ValueError, TypeError):
-                    self._send_json_response({"success": False, "error": "Invalid threshold weight value."}, 400)
-                    return
-
-            if serial_baudrate is not None:
-                try:
-                    serial_baudrate = int(serial_baudrate)
-                    if serial_baudrate not in (300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200):
-                        self._send_json_response({"success": False, "error": "Invalid baud rate value."}, 400)
-                        return
-                except (ValueError, TypeError):
-                    self._send_json_response({"success": False, "error": "Invalid baud rate value."}, 400)
-                    return
-
-            if serial_port is not None:
-                sp_str = str(serial_port).strip()
-                # Ensure device path only contains allowed path characters (e.g. /dev/ttyAMA0, /dev/ttyS0, COM1)
-                if sp_str and not re.match(r"^[a-zA-Z0-9_\-/\.]{1,64}$", sp_str):
-                    self._send_json_response({"success": False, "error": "Invalid serial port path character set."}, 400)
-                    return
-
-            def is_valid_url(u: str) -> bool:
-                if not u:
-                    return True
-                u_lower = u.lower()
-                return u_lower.startswith(("http://", "https://", "rtsp://")) and not any(c in u for c in ("\r", "\n", "\0", " "))
-
-            if anpr_camera_url is not None and not is_valid_url(str(anpr_camera_url)):
-                self._send_json_response({"success": False, "error": "ANPR Camera URL must start with http://, https://, or rtsp://"}, 400)
+            valid, error_msg = _validate_config_payload(data)
+            if not valid:
+                self._send_json_response({"success": False, "error": error_msg or "Invalid config."}, 400)
                 return
-
-            if anpr_server_url is not None and not is_valid_url(str(anpr_server_url)):
-                self._send_json_response({"success": False, "error": "ANPR Server URL must start with http:// or https://"}, 400)
-                return
-
-            if auxiliary_camera_urls is not None:
-                if not isinstance(auxiliary_camera_urls, list):
-                    self._send_json_response({"success": False, "error": "Auxiliary camera URLs must be a list."}, 400)
-                    return
-                for u in auxiliary_camera_urls:
-                    if not is_valid_url(str(u)):
-                        self._send_json_response({"success": False, "error": f"Invalid auxiliary camera URL: {u}"}, 400)
-                        return
 
             old_port = config.serial_port
             old_baud = config.serial_baudrate
 
             config.update_system_config(
-                min_weight=min_weight,
-                serial_port=serial_port,
-                serial_baudrate=serial_baudrate,
-                anpr_camera_url=anpr_camera_url,
-                auxiliary_camera_urls=auxiliary_camera_urls,
-                anpr_server_url=anpr_server_url,
+                min_weight=data.get("min_weight"),
+                serial_port=data.get("serial_port"),
+                serial_baudrate=data.get("serial_baudrate"),
+                anpr_camera_url=data.get("anpr_camera_url"),
+                auxiliary_camera_urls=data.get("auxiliary_camera_urls"),
+                anpr_server_url=data.get("anpr_server_url"),
             )
 
-            # Trigger live UART reader re-initialization if serial port or baud rate changed
-            if (serial_port and serial_port != old_port) or (serial_baudrate and serial_baudrate != old_baud):
-                try:
-                    from src.scale.scale_uart import get_uart_reader
-                    get_uart_reader().restart(config.serial_port, config.serial_baudrate)
-                    record_system_event("SCALE", f"Re-opened UART serial port {config.serial_port} @ {config.serial_baudrate} baud.")
-                except (AttributeError, OSError, RuntimeError) as uart_err:
-                    logger.error(f"[Config] Error restarting UART reader: {uart_err}")
+            _apply_uart_config_changes(
+                data.get("serial_port"),
+                data.get("serial_baudrate"),
+                old_port,
+                old_baud,
+            )
 
             record_system_event("CONFIG", "System configuration updated via web interface.")
-
             self._send_json_response({
                 "success": True,
                 "message": "System configuration saved and applied dynamically in real-time.",
             })
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             self._send_json_response({"success": False, "error": f"Invalid JSON payload: {e}"}, 400)
+
+
+def _is_valid_url(u: str) -> bool:
+    if not u:
+        return True
+    u_lower = u.lower()
+    return u_lower.startswith(("http://", "https://", "rtsp://")) and not any(
+        c in u for c in ("\r", "\n", "\0", " ")
+    )
+
+
+def _validate_config_payload(data: dict[str, Any]) -> tuple[bool, str | None]:
+    """Validates configuration parameters from JSON payload."""
+    min_weight = data.get("min_weight")
+    if min_weight is not None:
+        try:
+            val = float(min_weight)
+            if val < 0 or val > 100000.0:
+                return False, "Threshold weight must be between 0 and 100,000 kg."
+        except (ValueError, TypeError):
+            return False, "Invalid threshold weight value."
+
+    serial_baudrate = data.get("serial_baudrate")
+    if serial_baudrate is not None:
+        try:
+            b_val = int(serial_baudrate)
+            if b_val not in (300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200):
+                return False, "Invalid baud rate value."
+        except (ValueError, TypeError):
+            return False, "Invalid baud rate value."
+
+    serial_port = data.get("serial_port")
+    if serial_port is not None:
+        sp_str = str(serial_port).strip()
+        if sp_str and not re.match(r"^[a-zA-Z0-9_\-/\.]{1,64}$", sp_str):
+            return False, "Invalid serial port path character set."
+
+    anpr_camera_url = data.get("anpr_camera_url")
+    if anpr_camera_url is not None and not _is_valid_url(str(anpr_camera_url)):
+        return False, "ANPR Camera URL must start with http://, https://, or rtsp://"
+
+    anpr_server_url = data.get("anpr_server_url")
+    if anpr_server_url is not None and not _is_valid_url(str(anpr_server_url)):
+        return False, "ANPR Server URL must start with http:// or https://"
+
+    aux_urls = data.get("auxiliary_camera_urls")
+    if aux_urls is not None:
+        if not isinstance(aux_urls, list):
+            return False, "Auxiliary camera URLs must be a list."
+        for u in aux_urls:
+            if not _is_valid_url(str(u)):
+                return False, f"Invalid auxiliary camera URL: {u}"
+
+    return True, None
+
+
+def _apply_uart_config_changes(
+    serial_port: str | None,
+    serial_baudrate: int | None,
+    old_port: str,
+    old_baud: int,
+) -> None:
+    """Restarts UART reader if serial port or baudrate modified."""
+    if (serial_port and serial_port != old_port) or (serial_baudrate and serial_baudrate != old_baud):
+        try:
+            from src.scale.scale_uart import get_uart_reader
+            get_uart_reader().restart(config.serial_port, config.serial_baudrate)
+            record_system_event(
+                "SCALE",
+                f"Re-opened UART serial port {config.serial_port} @ {config.serial_baudrate} baud.",
+            )
+        except (AttributeError, OSError, RuntimeError) as uart_err:
+            logger.error(f"[Config] Error restarting UART reader: {uart_err}")
 
 
 class FallbackWebServer:

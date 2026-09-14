@@ -21,9 +21,9 @@ from src.camera.anpr_client import (
 )
 from src.camera.camera_manager import capture_auxiliary_snapshots, fetch_image_bytes
 from src.config.camera_config import (
-    ANPR_CAMERA_URL,
     ANPR_CAPTURE_INTERVAL,
     POST_STABILITY_DURATION,
+    get_anpr_camera_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class WeighbridgeSessionManager:
             loop_start = time.time()
 
             try:
-                img_bytes = fetch_image_bytes(ANPR_CAMERA_URL)
+                img_bytes = fetch_image_bytes(get_anpr_camera_url())
                 if img_bytes:
                     with self._lock:
                         # Keep only recent frames in RAM to prevent memory bloat
@@ -187,25 +187,8 @@ class WeighbridgeSessionManager:
                 f"Plate='{final_anpr_plate}', Weight={self.stable_weight:.3f} kg, "
                 f"Cam1 Frames={total_frames}, Aux Cams={len(aux_copy)}"
             )
-
-            # Bridge to fallback web server live telemetry
-            try:
-                from src.web.server import record_system_event, record_weighment_result
-                is_err = bool(not self._cam1_plates)
-                record_weighment_result(
-                    session_id=str(self.session_id),
-                    plate=final_anpr_plate,
-                    weight=self.stable_weight,
-                    is_error=is_err,
-                    status_code=final_anpr_plate if is_err else "SUCCESS",
-                )
-                record_system_event(
-                    "WEIGHMENT",
-                    f"Session {self.session_id}: {self.stable_weight:.3f} kg -> Plate: '{final_anpr_plate}'",
-                )
-            except (ImportError, AttributeError, ValueError) as e:
-                logger.debug(f"[Session] Error recording live telemetry: {e}")
-
+            is_err = bool(not self._cam1_plates)
+            _record_session_telemetry(self.session_id, final_anpr_plate, self.stable_weight, is_err)
             return package
 
     def reset_session(self):
@@ -224,6 +207,30 @@ class WeighbridgeSessionManager:
             self._cam1_plates.clear()
             self._cam1_statuses.clear()
             self._auxiliary_images.clear()
+
+
+def _record_session_telemetry(
+    session_id: str | None,
+    plate: str,
+    weight: float,
+    is_error: bool,
+) -> None:
+    """Bridge completed session outcome to local web server live telemetry feed."""
+    try:
+        from src.web.server import record_system_event, record_weighment_result
+        record_weighment_result(
+            session_id=str(session_id),
+            plate=plate,
+            weight=weight,
+            is_error=is_error,
+            status_code=plate if is_error else "SUCCESS",
+        )
+        record_system_event(
+            "WEIGHMENT",
+            f"Session {session_id}: {weight:.3f} kg -> Plate: '{plate}'",
+        )
+    except (ImportError, AttributeError, ValueError) as e:
+        logger.debug(f"[Session] Error recording live telemetry: {e}")
 
 
 # Module-level singleton

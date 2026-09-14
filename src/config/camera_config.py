@@ -20,15 +20,6 @@ def get_anpr_server_url() -> str:
     """Returns current ANPR server URL override or default local endpoint."""
     return config.anpr_server_url or "http://127.0.0.1:8000/recognize"
 
-# Dynamic module-level attribute lookup fallback for backward compatibility
-def __getattr__(name: str):
-    if name == "ANPR_CAMERA_URL":
-        return get_anpr_camera_url()
-    elif name == "AUXILIARY_CAMERA_URLS":
-        return get_auxiliary_camera_urls()
-    elif name == "ANPR_SERVER_URL":
-        return get_anpr_server_url()
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 # ── Timing & Timeouts ────────────────────────────────────────────────────────
 ANPR_CAPTURE_INTERVAL = 2.0        # Seconds between Camera 1 ANPR captures

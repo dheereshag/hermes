@@ -30,11 +30,12 @@ class ScaleStabilityMachine:
         self._candidate_start_time = 0.0
         self._last_printed_weight = -9999.0
 
-    def process_new_weight(self, parsed_weight: float):
-        now = time.time()
-        self.last_weight = parsed_weight
+    def _reset_candidate_state(self):
+        self.state = ScaleState.SCALE_IDLE
+        self._current_stable_candidate = 0.0
+        self._candidate_start_time = 0.0
 
-        # Log weight if it changed significantly (≥0.1 kg)
+    def _log_weight_change(self, parsed_weight: float):
         if abs(parsed_weight - self._last_printed_weight) >= 0.1:
             logger.info(
                 f"[Scale] Parsed weight: {parsed_weight:.3f} "
@@ -42,45 +43,25 @@ class ScaleStabilityMachine:
             )
             self._last_printed_weight = parsed_weight
 
-        # Check if 10-second post-stabilization period completed and package is ready
-        completed_package = session_manager.check_session_progress()
-        if completed_package:
-            self._trigger_upload(completed_package)
-
-        # ── Session end: weight returned to zero ──────────────────────────────
+    def _handle_zero_or_subthreshold(self, parsed_weight: float) -> bool:
         if parsed_weight <= 0.0:
             if self.state != ScaleState.SCALE_IDLE:
                 logger.info(
                     "[Scale Session] Weight returned to zero. "
                     "Session closed. Ready for next weighing."
                 )
-                self.state = ScaleState.SCALE_IDLE
-                self._current_stable_candidate = 0.0
-                self._candidate_start_time = 0.0
+                self._reset_candidate_state()
                 session_manager.reset_session()
-            return
+            return True
 
-        # ── Lockout: only one upload per session ──────────────────────────────
-        if self.state == ScaleState.SCALE_STABLE_RECORDED:
-            return
-
-        # ── Below threshold: reset ─────────────────────────────────────────────
         if parsed_weight < config.supabase_weight_threshold:
-            self.state = ScaleState.SCALE_IDLE
-            self._current_stable_candidate = 0.0
-            self._candidate_start_time = 0.0
+            self._reset_candidate_state()
             session_manager.reset_session()
-            return
+            return True
 
-        # ── Start stability timer & camera ANPR session on new trigger ────────
-        if self.state == ScaleState.SCALE_IDLE:
-            self.state = ScaleState.SCALE_STABILIZING
-            self._current_stable_candidate = parsed_weight
-            self._candidate_start_time = now
-            session_manager.start_session()
-            return
+        return False
 
-        # ── Evaluate 10-second stability window ───────────────────────────────
+    def _evaluate_stability_window(self, parsed_weight: float, now: float):
         if abs(parsed_weight - self._current_stable_candidate) <= STABILITY_TOLERANCE:
             elapsed = now - self._candidate_start_time
             if elapsed >= STABILITY_DURATION:
@@ -91,13 +72,36 @@ class ScaleStabilityMachine:
                 self.state = ScaleState.SCALE_STABLE_RECORDED
                 session_manager.on_weight_stabilized(self._current_stable_candidate)
         else:
-            # Weight shifted — reset candidate and timer
             logger.debug(
                 f"[Scale] Weight shifted from {self._current_stable_candidate:.3f} "
                 f"to {parsed_weight:.3f}. Resetting stability timer."
             )
             self._current_stable_candidate = parsed_weight
             self._candidate_start_time = now
+
+    def process_new_weight(self, parsed_weight: float):
+        now = time.time()
+        self.last_weight = parsed_weight
+        self._log_weight_change(parsed_weight)
+
+        completed_package = session_manager.check_session_progress()
+        if completed_package:
+            self._trigger_upload(completed_package)
+
+        if self._handle_zero_or_subthreshold(parsed_weight):
+            return
+
+        if self.state == ScaleState.SCALE_STABLE_RECORDED:
+            return
+
+        if self.state == ScaleState.SCALE_IDLE:
+            self.state = ScaleState.SCALE_STABILIZING
+            self._current_stable_candidate = parsed_weight
+            self._candidate_start_time = now
+            session_manager.start_session()
+            return
+
+        self._evaluate_stability_window(parsed_weight, now)
 
     def _trigger_upload(self, session_package: dict):
         # Import here to avoid circular imports
