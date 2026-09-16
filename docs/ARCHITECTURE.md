@@ -132,3 +132,31 @@ sequenceDiagram
     Scale->>Herm: Weight returns to 0kg
     Herm->>Herm: Reset Session Manager to IDLE
 ```
+
+---
+
+## 4. Threading & Concurrency Architecture (Raspberry Pi 5 & Python 3.14)
+
+Hermes operates as a real-time industrial appliance controller on a Raspberry Pi 5 (Quad-Core 64-bit Arm Cortex-A76 @ 2.4 GHz) running **Python 3.14**.
+
+### 4.1 Thread Topology & Real-Time Isolation
+
+Because Python 3.14 on a multi-core Pi 5 supports free-threaded CPython (PEP 703 / optional GIL) and releases the GIL during all socket I/O, serial reads, subprocesses, and sleep states, Hermes uses decoupled daemon threads rather than heavyweight multiprocessing:
+
+| Thread Name | Type / Lifecycle | Execution Frequency / Trigger | Non-Blocking Guarantee |
+| :--- | :--- | :--- | :--- |
+| **`ScaleUART`** | Dedicated Daemon Thread | Continuous (50ms read, 300ms flush) | Reads `/dev/ttyAMA0` serial bytes; never blocks on network or camera I/O. |
+| **`FallbackWebServer`** | Werkzeug WSGI Daemon Thread | Persistent on port `:8080` | Serves web UI and REST API asynchronously without delaying scale operations. |
+| **`WiFiWatchdog`** | Dedicated Daemon Thread | Every 30.0s | Runs `nmcli` network checks and controls emergency AP fallback independently. |
+| **`ANPRLoop_<id>`** | Ephemeral Session Thread | Every 2.0s during weighing | Fetches Cam 1 frame and queries Argus microservice asynchronously. |
+| **`AuxCapture_<id>`** | Ephemeral Session Worker | Triggered upon 10s stability | Fetches overview angles (Cams 2..N) via `ThreadPoolExecutor(4)` without stalling serial reads. |
+| **`CloudUpload_<id>`** | Ephemeral Upload Worker | Triggered upon session finalization | Transmits multi-MB payload with 20s timeout to Gluvok API without blocking the scale thread. |
+
+### 4.2 Python 3.14 Free-Threading & Synchronization Invariants
+
+Under Python 3.14, threads execute with true hardware parallelism across all 4 Cortex-A76 cores. To prevent data races in free-threaded mode:
+- **`ConfigManager`**: All mutable properties and disk serialization (`config.json`) are guarded by `threading.RLock()`.
+- **`ScaleUARTReader`**: Line buffer bytearray and inter-character timeout tracking are synchronized via `threading.Lock()`.
+- **`WeighbridgeSessionManager`**: Phase transitions, frame buffers, and candidate plate lists are guarded by `threading.Lock()`.
+- **`state.py`**: Telemetry circular buffer and live error statistics are guarded by `_events_lock` and `_live_lock`.
+

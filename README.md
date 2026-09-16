@@ -85,6 +85,7 @@ hermes/
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
+- **Non-Blocking Real-Time Threading (Python 3.14 & Pi 5)**: Real-time scale serial reading is completely decoupled from slow network I/O; cloud uploads (20s timeout) and auxiliary camera snapshots are dispatched asynchronously in dedicated background workers, with full thread-safety locking across all shared state.
 - **Gluvok Cloud API Integration**: Authenticates statelessly with Gluvok edge device headers (`x-device-id`, `x-device-key`) and posts complete weighment records with direct base64 images.
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` (with blueprints for REST APIs and views) for live telemetry, error monitoring, and runtime configuration.
 - **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.

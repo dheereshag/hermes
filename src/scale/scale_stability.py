@@ -6,6 +6,7 @@ One transmission per session; resets only when weight returns to zero.
 """
 
 import logging
+import threading
 import time
 from enum import Enum
 
@@ -103,10 +104,22 @@ class ScaleStabilityMachine:
 
         self._evaluate_stability_window(parsed_weight, now)
 
-    def _trigger_upload(self, session_package: dict):
+    def _trigger_upload(self, session_package: dict) -> threading.Thread:
         # Import here to avoid circular imports
         from src.network.cloud_post import post_to_cloud
-        post_to_cloud(session_package)
+
+        session_id = str(session_package.get("session_id", "unknown"))
+        upload_thread = threading.Thread(
+            target=post_to_cloud,
+            args=(session_package,),
+            name=f"CloudUpload_{session_id}",
+            daemon=True,
+        )
+        upload_thread.start()
+        logger.info(
+            f"[Scale Session] Dispatched cloud upload for session {session_id} in background thread."
+        )
+        return upload_thread
 
     def reset(self):
         """Manually reset the state machine."""

@@ -48,6 +48,7 @@ class WeighbridgeSessionManager:
         self._auxiliary_images: dict[int, bytes | None] = {}
 
         self._anpr_thread: threading.Thread | None = None
+        self._aux_thread: threading.Thread | None = None
         self._stop_anpr_event = threading.Event()
 
         self._post_stability_start_time: float = 0.0
@@ -125,10 +126,23 @@ class WeighbridgeSessionManager:
                 f"Triggering auxiliary camera snapshots and starting +10s countdown..."
             )
 
-        # Concurrently capture auxiliary overview cameras (2 ... N)
-        aux_images = capture_auxiliary_snapshots()
-        with self._lock:
-            self._auxiliary_images = aux_images
+        # Concurrently capture auxiliary overview cameras (2 ... N) in background thread
+        self._aux_thread = threading.Thread(
+            target=self._capture_auxiliary_in_background,
+            name=f"AuxCapture_{self.session_id}",
+            daemon=True,
+        )
+        self._aux_thread.start()
+
+    def _capture_auxiliary_in_background(self) -> None:
+        """Background worker to fetch auxiliary snapshots without stalling real-time scale reads."""
+        try:
+            aux_images = capture_auxiliary_snapshots()
+            with self._lock:
+                if self.phase in (SessionPhase.PHASE_POST_STABILITY, SessionPhase.PHASE_COMPLETED):
+                    self._auxiliary_images = aux_images
+        except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
+            logger.error(f"[Session {self.session_id}] Error capturing auxiliary cameras: {e}")
 
     def check_session_progress(self) -> dict[str, Any] | None:
         """
@@ -156,6 +170,9 @@ class WeighbridgeSessionManager:
 
     def _finalize_session_package(self) -> dict[str, Any]:
         """Assembles final session dictionary data."""
+        if self._aux_thread and self._aux_thread.is_alive():
+            self._aux_thread.join(timeout=1.0)
+
         with self._lock:
             if self._cam1_plates:
                 final_anpr_plate = get_highest_frequency_plate(self._cam1_plates)
@@ -195,7 +212,6 @@ class WeighbridgeSessionManager:
             return package
 
     def reset_session(self):
-
         """Resets session manager state when weight returns to zero (scale idle)."""
         with self._lock:
             if self.phase == SessionPhase.PHASE_IDLE:
@@ -203,6 +219,7 @@ class WeighbridgeSessionManager:
 
             logger.info(f"[Session {self.session_id}] Weight zeroed. Resetting session manager.")
             self._stop_anpr_event.set()
+            self._aux_thread = None
             self.phase = SessionPhase.PHASE_IDLE
             self.session_id = None
             self.stable_weight = 0.0

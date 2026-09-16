@@ -39,6 +39,7 @@ def shutdown(signum, frame):
     get_uart_reader().stop()
     stop_web_server()
     stop_wifi_watchdog()
+    session_manager.reset_session()
     sys.exit(0)
 
 
