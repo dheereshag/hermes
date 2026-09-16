@@ -1,5 +1,6 @@
 """
-camera_manager.py
+camera.py — IP Camera Frame Grabber & Parallel Snapshot Driver
+==============================================================
 Low-resource IP camera frame capture module.
 Supports HTTP JPEG Snapshots and on-demand OpenCV RTSP stream frame grabbing.
 Uses ThreadPoolExecutor for concurrent multi-camera snapshot capture.
@@ -13,10 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from src.config.camera_config import (
+from src.config.config_manager import config
+from src.config.constants import (
     CAMERA_TIMEOUT,
     MAX_PARALLEL_CAMERA_WORKERS,
-    get_auxiliary_camera_urls,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ def _fetch_rtsp_frame(rtsp_url: str, timeout: float) -> bytes | None:
     """On-demand single frame capture from RTSP stream using OpenCV."""
     try:
         import cv2
+
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
         if not cap.isOpened():
             logger.warning(f"[Camera] Unable to open RTSP stream: {rtsp_url}")
@@ -85,7 +87,7 @@ def capture_auxiliary_snapshots(
     Concurrently captures snapshot images from all auxiliary cameras (Cameras 2 ... N).
     Returns a dict mapping camera_index (2, 3, ...) to raw image bytes or None.
     """
-    urls = camera_urls if camera_urls is not None else get_auxiliary_camera_urls()
+    urls = camera_urls if camera_urls is not None else config.auxiliary_camera_urls
     results: dict[int, bytes | None] = {}
 
     if not urls:
@@ -117,3 +119,9 @@ def capture_auxiliary_snapshots(
     elapsed = time.time() - start_time
     logger.info(f"[Camera] Auxiliary parallel capture completed in {elapsed:.2f}s")
     return results
+
+
+__all__ = [
+    "capture_auxiliary_snapshots",
+    "fetch_image_bytes",
+]

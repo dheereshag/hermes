@@ -4,10 +4,10 @@ import json
 import unittest
 
 from src.config.config_manager import config
+from src.core.telemetry import reset_state
 from src.web.app import create_app
 from src.web.auth import reset_auth_state
 from src.web.server import FallbackWebServer
-from src.web.state import reset_state
 
 
 class TestFlaskDiagnosticsApp(unittest.TestCase):

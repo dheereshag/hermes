@@ -13,24 +13,23 @@ Welcome to the **Hermes Weighbridge & ANPR Integration Controller** maintainer m
    - [`pyproject.toml` & `uv.lock`](#pyprojecttoml--uvlock)
 3. [Configuration Subsystem (`src/config/`)](#3-configuration-subsystem-srcconfig)
    - [`config_manager.py`](#srcconfigconfig_managerpy)
-   - [`camera_config.py`](#srcconfigcamera_configpy)
-4. [Scale & Serial Subsystem (`src/scale/`)](#4-scale--serial-subsystem-srcscale)
-   - [`scale_uart.py`](#srcscalescale_uartpy)
-   - [`scale_stability.py`](#srcscalescale_stabilitypy)
-5. [Camera & ANPR Subsystem (`src/camera/`)](#5-camera--anpr-subsystem-srccamera)
-   - [`camera_manager.py`](#srccameracamera_managerpy)
-   - [`anpr_client.py`](#srccameraanpr_clientpy)
-   - [`session_manager.py`](#srccamerasession_managerpy)
-6. [Cloud & Network Subsystem (`src/network/`)](#6-cloud--network-subsystem-srcnetwork)
-   - [`cloud_client.py`](#srcnetworkcloud_clientpy)
-   - [`cloud_post.py`](#srcnetworkcloud_postpy)
-   - [`wifi_manager.py`](#srcnetworkwifi_managerpy)
+   - [`constants.py`](#srcconfigconstantspy)
+4. [Core Logic Subsystem (`src/core/`)](#4-core-logic-subsystem-srccore)
+   - [`session.py`](#srccoresessionpy)
+   - [`stability.py`](#srccorestabilitypy)
+   - [`telemetry.py`](#srccoretelemetrypy)
+5. [Devices Subsystem (`src/devices/`)](#5-devices-subsystem-srcdevices)
+   - [`scale.py`](#srcdevicesscalepy)
+   - [`camera.py`](#srcdevicescamerapy)
+   - [`wifi.py`](#srcdeviceswifipy)
+6. [Integrations Subsystem (`src/integrations/`)](#6-integrations-subsystem-srcintegrations)
+   - [`anpr.py`](#srcintegrationsanprpy)
+   - [`gluvok.py`](#srcintegrationsgluvokpy)
 7. [Web Diagnostics Subsystem (`src/web/`)](#7-web-diagnostics-subsystem-srcweb)
    - [`app.py`](#srcwebapppy)
    - [`blueprints/api.py`](#srcwebblueprintsapipy)
    - [`blueprints/views.py`](#srcwebblueprintsviewspy)
    - [`auth.py`](#srcwebauthpy)
-   - [`state.py`](#srcwebstatepy)
    - [`validation.py`](#srcwebvalidationpy)
    - [`server.py`](#srcwebserverpy)
    - [`templates/index.html`](#srcwebtemplatesindexhtml)
@@ -126,7 +125,7 @@ Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv
 ## 3. Configuration Subsystem (`src/config/`)
 
 ### `src/config/config_manager.py`
-Singleton managing configuration loading, fallback defaults, and JSON disk persistence (`load_settings` / `_persist`).
+Singleton managing configuration loading, fallback defaults, thread-safe access (`threading.RLock`), dynamic camera getters, and JSON disk persistence (`load_settings` / `_persist`).
 
 #### Class: `ConfigManager`
 - **Attributes**:
@@ -143,42 +142,105 @@ Singleton managing configuration loading, fallback defaults, and JSON disk persi
   - `anpr_camera_url`: Snapshot URL for Camera 1.
   - `auxiliary_camera_urls`: List of snapshot URLs for Cameras 2..N.
 - **Methods**:
-  - **`__init__(file_path=CONFIG_FILE_PATH)`**: Initializes default values and calls `load_settings()`.
+  - **`__init__(file_path=CONFIG_FILE_PATH)`**: Initializes default values, creates recursive lock, and calls `load_settings()`.
   - **`load_settings() -> None`**: Reads `config.json`. If missing, creates a default template.
   - **`_build_data_dict() -> dict[str, Any]`**: Assembles current in-memory fields into a clean dictionary.
-  - **`_persist() -> None`**: Writes data dictionary to `config.json` with 2-space indentation.
+  - **`_persist() -> None`**: Writes data dictionary to `config.json` with 2-space indentation under lock.
   - **`save_settings(...) -> None`**: High-level method to update Wi-Fi, Center ID, weight threshold, and device credentials.
   - **`update_system_config(...) -> None`**: Live reconfiguration of hardware parameters (threshold, port, baud, camera URLs).
   - **`update_device_credentials(device_id: int, device_key: str) -> None`**: Updates edge device credentials.
   - **`update_wifi_credentials(ssid: str, password: str) -> None`**: Updates network credentials.
   - **`clear_wifi_credentials() -> None`**: Clears Wi-Fi credentials to trigger emergency AP mode.
+  - **`get_anpr_camera_url() -> str`**: Returns active ANPR camera snapshot URL.
+  - **`get_auxiliary_camera_urls() -> list[str]`**: Returns list of active auxiliary camera URLs.
+  - **`get_anpr_server_url() -> str`**: Returns configured ANPR endpoint or default (`http://127.0.0.1:8000/recognize`).
 - **Global**: `config = ConfigManager()` (Singleton used across all modules).
 
-### `src/config/camera_config.py`
-Timing parameters and dynamic getters for camera and ANPR URLs.
+### `src/config/constants.py`
+Centralized repository of timing windows, timeouts, buffer boundaries, NetworkManager names, and regex patterns.
 
-- **Constants**:
-  - `ANPR_CAPTURE_INTERVAL = 2.0`: Interval (seconds) between license plate snapshots during weighing.
-  - `POST_STABILITY_DURATION = 10.0`: Buffer time (seconds) after scale confirms stable weight before closing the session.
-  - `CAMERA_TIMEOUT = 3.0`: Maximum timeout for camera HTTP snapshots.
-  - `ANPR_SERVER_TIMEOUT = 15.0`: Timeout for submitting images to Argus ANPR.
-  - `MAX_PARALLEL_CAMERA_WORKERS = 4`: ThreadPool worker limit for concurrent auxiliary camera captures.
-- **Functions**:
-  - **`get_anpr_camera_url() -> str`**: Returns `config.anpr_camera_url`.
-  - **`get_auxiliary_camera_urls() -> list[str]`**: Returns `config.auxiliary_camera_urls`.
-  - **`get_anpr_server_url() -> str`**: Returns configured ANPR endpoint or fallback default (`http://127.0.0.1:8000/recognize`).
+- **Scale & UART Timings**:
+  - `SCALE_TIMEOUT = 0.05`: 50ms read timeout for non-blocking serial character polling.
+  - `INTER_CHAR_TIMEOUT_S = 0.3`: 300ms silence flush threshold.
+  - `MAX_BUFFER_LEN = 256`: Safety cap on byte buffer length.
+  - `STABILITY_DURATION = 10.0`: Continuous stability requirement (seconds).
+  - `STABILITY_TOLERANCE = 2.0`: Maximum allowable variance (±2.0 kg).
+- **Camera & ANPR Timings**:
+  - `ANPR_CAPTURE_INTERVAL = 2.0`: Interval (seconds) between plate capture attempts.
+  - `POST_STABILITY_DURATION = 10.0`: Buffer time (seconds) after scale confirms stable weight before closing session.
+  - `CAMERA_TIMEOUT = 3.0`: HTTP snapshot request timeout.
+  - `ANPR_SERVER_TIMEOUT = 15.0`: Argus ANPR REST query timeout.
+  - `MAX_PARALLEL_CAMERA_WORKERS = 4`: Auxiliary camera snapshot thread pool worker cap.
+- **Cloud & Network Timings**:
+  - `CLOUD_POST_TIMEOUT = 20.0`: Maximum timeout for Gluvok cloud JSON payload upload.
+  - `HOTSPOT_CON_NAME = "Gluvok-Hotspot"`: NetworkManager emergency profile name.
+  - `DEFAULT_HOTSPOT_SSID = "Gluvok-Setup"`: Default hotspot SSID.
+  - `DEFAULT_HOTSPOT_PASS = "gluvok1234"`: Default hotspot WPA2 passphrase.
+  - `WIFI_WATCHDOG_INTERVAL = 30.0`: Wi-Fi connectivity poll interval.
+- **Regexes & URLs**:
+  - `GLUVOK_BASE_URL = "https://gluvok.vercel.app"`: Production cloud backend endpoint.
+  - `INDIAN_PLATE_REGEX`: Standard state and Bharat Series vehicle plate pattern.
 
 ---
 
-## 4. Scale & Serial Subsystem (`src/scale/`)
+## 4. Core Logic Subsystem (`src/core/`)
 
-### `src/scale/scale_uart.py`
+### `src/core/session.py`
+Coordinates weighbridge session lifecycle, multi-camera coordination, consensus plate voting, and payload packaging.
+
+- **Enum `SessionPhase`**:
+  - `PHASE_IDLE (0)`: No vehicle active.
+  - `PHASE_STABILIZING (1)`: Vehicle detected (>50kg); 2-second Camera 1 ANPR capture loop running.
+  - `PHASE_POST_STABILITY (2)`: Weight stable; auxiliary cameras captured; +10s timer running.
+  - `PHASE_COMPLETED (3)`: Package assembled and dispatched; waiting for truck to exit platform.
+- **Class: `WeighbridgeSessionManager`**:
+  - **`start_session() -> None`**: Generates unique `session_id` (`SESS_<epoch>_<uuid>`), transitions to `PHASE_STABILIZING`, and spawns daemon thread `_anpr_loop`.
+  - **`_anpr_loop() -> None`**: Background worker capturing Camera 1 every 2.0 seconds and sending frames to Argus ANPR. Retains only the last 5 frames in memory to prevent RAM bloat on edge devices.
+  - **`on_weight_stabilized(weight: float) -> None`**: Transitions to `PHASE_POST_STABILITY`, triggers parallel auxiliary camera snapshots (`capture_auxiliary_snapshots`), and starts the 10-second post-stability countdown.
+  - **`check_session_progress() -> dict[str, Any] | None`**: Checks if the 10-second post-stability duration has completed. If expired, transitions to `PHASE_COMPLETED`, stops the ANPR loop, and calls `_finalize_session_package()`.
+  - **`_finalize_session_package() -> dict[str, Any]`**: Assembles final payload: stable weight, highest-voted plate (or fallback error code), Camera 1 final JPEG, auxiliary camera JPEGs, sample statistics, and logs telemetry. Immediately releases raw frame buffers from memory.
+  - **`reset_session() -> None`**: Resets all state variables when weight returns to zero.
+- **Global**: `session_manager = WeighbridgeSessionManager()`
+
+### `src/core/stability.py`
+Continuous weight stability state machine.
+
+- **Enums & Constants**:
+  - `ScaleState.SCALE_IDLE (0)`: Platform empty (weight <= threshold).
+  - `ScaleState.SCALE_STABILIZING (1)`: Vehicle on platform; stability countdown in progress.
+  - `ScaleState.SCALE_STABLE_RECORDED (2)`: Weight stable for 10.0s; session locked until truck leaves.
+- **Class: `ScaleStabilityMachine`**:
+  - **`process_new_weight(parsed_weight: float) -> None`**:
+    1. Checks if an active session package is ready for upload.
+    2. If weight <= 0.0 kg, resets machine to `SCALE_IDLE` and resets session manager.
+    3. If weight < `weight_threshold` (e.g. 50 kg), resets candidate.
+    4. If in `SCALE_IDLE`, transitions to `SCALE_STABILIZING` and calls `session_manager.start_session()`.
+    5. Evaluates stability window: if weight stays within ±2.0 kg for 10.0s, locks to `SCALE_STABLE_RECORDED` and invokes `session_manager.on_weight_stabilized()`.
+  - **`_trigger_upload(package: dict[str, Any]) -> None`**: Dispatches background worker thread `CloudUpload_<session_id>` to invoke `post_to_cloud` without stalling the scale serial reader.
+  - **`reset() -> None`**: Manually resets state machine to `SCALE_IDLE`.
+- **Functions**:
+  - **`get_scale_state() -> ScaleState`**: Returns active enum state.
+  - **`get_current_weight() -> float`**: Returns latest parsed numeric weight.
+- **Global**: `scale_state_machine = ScaleStabilityMachine()`
+
+### `src/core/telemetry.py`
+Decoupled, thread-safe in-memory telemetry buffer.
+
+- **`record_system_event(source: str, message: str) -> None`**: Appends timestamped entry to circular log (max 20 items) under `_events_lock`.
+- **`record_weighment_result(...) -> None`**: Records latest session outcome and updates live error counters under `_live_lock`.
+- **`record_error_event(error_code: str, message: str = "") -> None`**: Increments occurrence count for error codes.
+- **`get_latest_weighment() -> dict`**: Returns thread-safe snapshot of latest weighment.
+- **`get_error_counts() -> dict`**: Returns thread-safe snapshot of error histogram.
+- **`get_system_events() -> list`**: Returns copy of recent event list.
+- **`reset_telemetry() -> None`**: Resets all in-memory buffers (also aliased as `reset_state`).
+
+---
+
+## 5. Devices Subsystem (`src/devices/`)
+
+### `src/devices/scale.py`
 UART serial reader and low-level byte packet parser.
 
-- **Constants**:
-  - `INTER_CHAR_TIMEOUT_S = 0.3`: Flushes buffer if 300ms of silence occurs between characters (handles indicators without newline terminators).
-  - `MAX_BUFFER_LEN = 256`: Safety boundary preventing memory exhaustion from malformed serial chatter.
-  - `SCALE_TIMEOUT = 0.05`: 50ms read timeout for responsive non-blocking polling.
 - **Class: `ScaleUARTReader`**:
   - **`__init__()`**: Initializes thread handles, byte buffer (`bytearray`), locks, and active settings.
   - **`start(port=None, baudrate=None) -> None`**: Spawns daemon thread `_read_loop`.
@@ -198,32 +260,7 @@ UART serial reader and low-level byte packet parser.
   - **`handle_scale_char_processed(weight: float) -> None`**: Bridge invoking `scale_stability.process_new_weight(weight)`.
   - **`get_uart_reader() -> ScaleUARTReader`**: Returns singleton instance `_uart_reader`.
 
-### `src/scale/scale_stability.py`
-Continuous weight stability state machine.
-
-- **Enums & Constants**:
-  - `ScaleState.SCALE_IDLE (0)`: Platform empty (weight <= threshold).
-  - `ScaleState.SCALE_STABILIZING (1)`: Vehicle on platform; stability countdown in progress.
-  - `ScaleState.SCALE_STABLE_RECORDED (2)`: Weight stable for 10.0s; session locked until truck leaves.
-  - `STABILITY_TOLERANCE = 2.0`: ±2.0 kg maximum allowed deviation.
-  - `STABILITY_DURATION = 10.0`: Required continuous duration within tolerance.
-- **Class: `ScaleStabilityMachine`**:
-  - **`process_new_weight(parsed_weight: float) -> None`**:
-    1. Checks if an active session package is ready for upload.
-    2. If weight <= 0.0 kg, resets machine to `SCALE_IDLE` and resets session manager.
-    3. If weight < `weight_threshold` (e.g. 50 kg), resets candidate.
-    4. If in `SCALE_IDLE`, transitions to `SCALE_STABILIZING` and calls `session_manager.start_session()`.
-    5. Evaluates stability window: if weight stays within ±2.0 kg for 10.0s, locks to `SCALE_STABLE_RECORDED` and invokes `session_manager.on_weight_stabilized()`.
-  - **`reset() -> None`**: Manually resets state machine to `SCALE_IDLE`.
-- **Functions**:
-  - **`get_scale_state() -> ScaleState`**: Returns active enum state.
-  - **`get_current_weight() -> float`**: Returns latest parsed numeric weight.
-
----
-
-## 5. Camera & ANPR Subsystem (`src/camera/`)
-
-### `src/camera/camera_manager.py`
+### `src/devices/camera.py`
 Concurrent IP camera frame capture module.
 
 - **`fetch_image_bytes(camera_url: str, timeout: float = CAMERA_TIMEOUT) -> bytes | None`**:
@@ -235,7 +272,25 @@ Concurrent IP camera frame capture module.
 - **`capture_auxiliary_snapshots(camera_urls: list[str] | None = None) -> dict[int, bytes | None]`**:
   Concurrently captures overview snapshots from all configured auxiliary cameras (Cameras 2..N) using `ThreadPoolExecutor(max_workers=4)`. Returns dictionary mapping camera index (`2, 3, ...`) to JPEG bytes.
 
-### `src/camera/anpr_client.py`
+### `src/devices/wifi.py`
+Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
+
+- **Functions**:
+  - **`is_nmcli_available() -> bool`**: Verifies `nmcli` binary exists on the system.
+  - **`is_wifi_connected() -> bool`**: Inspects `nmcli dev` status. Returns `True` only if `wlan0` is connected to an upstream router (excluding our emergency hotspot).
+  - **`is_hotspot_active() -> bool`**: Returns boolean indicating if emergency hotspot is active.
+  - **`start_emergency_hotspot(ssid, password) -> bool`**: Configures `wlan0` in AP mode with shared IPv4 routing (`10.42.0.1`). Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
+  - **`stop_emergency_hotspot() -> bool`**: Tears down emergency AP connection.
+  - **`connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]`**: Attempts connection to facility router. If connection fails, immediately re-engages the emergency hotspot so technician connectivity is not lost.
+  - **`_watchdog_loop(interval: float) -> None`**: Background thread monitoring connection state every 30 seconds, automatically activating or deactivating the hotspot.
+  - **`start_wifi_watchdog(interval=30.0) -> None`**: Starts watchdog thread.
+  - **`stop_wifi_watchdog() -> None`**: Stops watchdog thread.
+
+---
+
+## 6. Integrations Subsystem (`src/integrations/`)
+
+### `src/integrations/anpr.py`
 Argus ANPR microservice client and consensus voting algorithm.
 
 - **`resolve_anpr_endpoint(url: str | None = None) -> str`**:
@@ -251,70 +306,17 @@ Argus ANPR microservice client and consensus voting algorithm.
 - **`get_highest_frequency_plate(plate_list: Sequence[str | None]) -> str`**:
   Consensus voting: computes frequency histogram across all samples collected during the session. Returns the most frequent plate candidate, filtering out intermittent OCR noise.
 
-### `src/camera/session_manager.py`
-Coordinates weighbridge session lifecycle, multi-camera coordination, and data assembly.
-
-- **Enum `SessionPhase`**:
-  - `PHASE_IDLE (0)`: No vehicle active.
-  - `PHASE_STABILIZING (1)`: Vehicle detected (>50kg); 2-second Camera 1 ANPR capture loop running.
-  - `PHASE_POST_STABILITY (2)`: Weight stable; auxiliary cameras captured; +10s timer running.
-  - `PHASE_COMPLETED (3)`: Package assembled and dispatched; waiting for truck to exit platform.
-- **Class: `WeighbridgeSessionManager`**:
-  - **`start_session() -> None`**: Generates unique `session_id` (`SESS_<epoch>_<uuid>`), transitions to `PHASE_STABILIZING`, and spawns daemon thread `_anpr_loop`.
-  - **`_anpr_loop() -> None`**: Background worker capturing Camera 1 every 2.0 seconds and sending frames to Argus ANPR. Retains only the last 5 frames in memory to prevent RAM bloat on edge devices.
-  - **`on_weight_stabilized(weight: float) -> None`**: Transitions to `PHASE_POST_STABILITY`, triggers parallel auxiliary camera snapshots (`capture_auxiliary_snapshots`), and starts the 10-second post-stability countdown.
-  - **`check_session_progress() -> dict[str, Any] | None`**: Checks if the 10-second post-stability duration has completed. If expired, transitions to `PHASE_COMPLETED`, stops the ANPR loop, and calls `_finalize_session_package()`.
-  - **`_finalize_session_package() -> dict[str, Any]`**: Assembles final payload: stable weight, highest-voted plate (or fallback error code), Camera 1 final JPEG, auxiliary camera JPEGs, sample statistics, and logs telemetry. Immediately releases raw frame buffers from memory.
-  - **`reset_session() -> None`**: Resets all state variables when weight returns to zero.
-
----
-
-## 6. Cloud & Network Subsystem (`src/network/`)
-
-### `src/network/cloud_client.py`
-API endpoint definition and edge device authentication headers.
+### `src/integrations/gluvok.py`
+Gluvok Cloud API client, device headers authentication, Indian plate regex validation, weighment payload builder, and direct Base64 uploader.
 
 - **`GLUVOK_BASE_URL = "https://gluvok.vercel.app"`**: Base URL for cloud persistence.
 - **`get_device_headers() -> dict[str, str]`**: Generates custom HTTP headers (`x-device-id`, `x-device-key`) for stateless edge device authentication.
-
-### `src/network/cloud_post.py`
-Weighment record formatting, Indian license plate sanitization, and stateless base64 payload upload.
-
-- **Constant: `INDIAN_PLATE_REGEX`**:
-  `r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"`
-  Validates standard state plates (e.g. `MH12AB1234`) and Bharat Series plates (e.g. `22BH1234AA`).
 - **`sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]`**:
-  Returns `(detected_vehicle_number, vehicle_number)`. The second value is a sanitized Indian-format candidate (or placeholder `MH00XX0000`). Callers such as `_build_entry_payload` currently discard the second value and send only `detected_vehicle_number` to the cloud.
+  Returns `(detected_vehicle_number, vehicle_number)`. The second value is a sanitized Indian-format candidate (or placeholder `MH00XX0000`).
 - **`_build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]`**:
-  Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON payload:
-  ```json
-  {
-    "detected_vehicle_number": "RJ09GA0165",
-    "weight": 36500.0,
-    "center_id": 1,
-    "images": ["data:image/jpeg;base64,..."]
-  }
-  ```
+  Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON payload.
 - **`post_to_cloud(session_payload: dict[str, Any]) -> None`**:
   Transmits weighment payload to `POST /api/entries` with custom device headers. Treats HTTP `200` and `201` as success; also handles `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and other non-success statuses. Clears raw image memory in caller `session_payload` upon completion.
-
-### `src/network/wifi_manager.py`
-Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
-
-- **Constants**:
-  - `HOTSPOT_CON_NAME = "Gluvok-Hotspot"`: NetworkManager connection profile name.
-  - `DEFAULT_HOTSPOT_SSID = "Gluvok-Setup"`: Emergency Access Point SSID.
-  - `DEFAULT_HOTSPOT_PASS = "gluvok1234"`: WPA2 password.
-- **Functions**:
-  - **`is_nmcli_available() -> bool`**: Verifies `nmcli` binary exists on the system.
-  - **`is_wifi_connected() -> bool`**: Inspects `nmcli dev` status. Returns `True` only if `wlan0` is connected to an upstream router (excluding our emergency hotspot).
-  - **`is_hotspot_active() -> bool`**: Returns boolean indicating if emergency hotspot is active.
-  - **`start_emergency_hotspot(ssid, password) -> bool`**: Configures `wlan0` in AP mode with shared IPv4 routing (`10.42.0.1`). Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
-  - **`stop_emergency_hotspot() -> bool`**: Tears down emergency AP connection.
-  - **`connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]`**: Attempts connection to facility router. If connection fails, immediately re-engages the emergency hotspot so technician connectivity is not lost.
-  - **`_watchdog_loop(interval: float) -> None`**: Background thread monitoring connection state every 30 seconds, automatically activating or deactivating the hotspot.
-  - **`start_wifi_watchdog(interval=30.0) -> None`**: Starts watchdog thread.
-  - **`stop_wifi_watchdog() -> None`**: Stops watchdog thread.
 
 ---
 
@@ -362,7 +364,7 @@ REST API endpoints.
 - **`POST /api/config`** *(Protected: `@auth_required`)*:
   Validates payload via `validate_config_payload`. Updates `config.json`. Dynamically restarts UART serial reader if port or baudrate was modified.
 - **`POST /api/wifi`** *(Protected: `@auth_required`)*:
-  Saves SSID and password to configuration, then attempts immediate connection via `wifi_manager.connect_to_wifi()`.
+  Saves SSID and password to configuration, then attempts immediate connection via `wifi.connect_to_wifi()`.
 - **`POST /api/wifi/clear`** *(Protected: `@auth_required`)*:
   Clears stored credentials from `config.json`.
 
@@ -383,17 +385,6 @@ Authentication and security middleware.
   - **`verify_credentials(userid, password) -> bool`**: Constant-time comparison preventing timing attacks.
   - **`extract_auth_token() -> str`**: Extracts token from `Authorization: Bearer <token>` or `X-Auth-Token` header.
   - **`auth_required(func)`**: View decorator returning HTTP 401 if token is invalid or missing.
-
-### `src/web/state.py`
-Decoupled, thread-safe telemetry store.
-
-- **`record_system_event(source: str, message: str) -> None`**: Appends timestamped entry to circular log (max 20 items).
-- **`record_weighment_result(...) -> None`**: Records latest session outcome and updates live error counters.
-- **`record_error_event(error_code: str, message: str = "") -> None`**: Increments occurrence count for error codes.
-- **`get_latest_weighment() -> dict`**: Returns latest weighment snapshot.
-- **`get_error_counts() -> dict`**: Returns current error histogram.
-- **`get_system_events() -> list`**: Returns system event list.
-- **`reset_state() -> None`**: Resets all in-memory buffers (used in test setup).
 
 ### `src/web/validation.py`
 Input sanitization and guard clauses.
@@ -431,6 +422,7 @@ Hermes contains a comprehensive suite of unit and integration tests executing un
 | [`tests/test_anpr_client.py`](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py) | `TestANPRClient` | Empty byte handling, Argus recognition schema parsing (`results[].plate`), pre-screening rejection parsing (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`), flat JSON parsing, network timeout & connection error codes, and highest-frequency consensus plate voting algorithm. |
 | [`tests/test_session_fallback.py`](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) | `TestSessionErrorFallback` | Weighbridge session error propagation (confirming rejected Argus status is forwarded as plate value while still packaging the truck overview image), and consensus preference for valid plates over transient errors. |
 | [`tests/test_cloud_post.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py) | `TestCloudPost` | Stateless device authentication headers (`x-device-id`, `x-device-key`), payload construction, Base64 URI generation, HTTP 200/201 success flow, and error handling (401, 403, 400, 500, network exceptions). |
+| [`tests/test_threading_isolation.py`](file:///Users/d/Downloads/hermes/tests/test_threading_isolation.py) | `TestThreadingIsolation` | Concurrency safety: non-blocking auxiliary camera captures on weight stability, non-blocking cloud upload dispatches, and thread-safe concurrent access across `ConfigManager`. |
 | [`tests/test_web_server.py`](file:///Users/d/Downloads/hermes/tests/test_web_server.py) | `TestFlaskDiagnosticsApp` | Flask web application routes (`/`, `/scale`, `/anpr`, `/cloud`, etc.), `/api/status` schema, Wi-Fi provisioning (`/api/wifi`, `/api/wifi/clear`), configuration updates (`POST /api/config`), input validation, 401 Unauthorized handling, 404 responses, and `FallbackWebServer` thread lifecycle (`start`/`stop`). |
 | [`tests/test_wifi_manager.py`](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py) | `TestWiFiManager` | NetworkManager `nmcli` parsing, active connection detection, exclusion of emergency hotspot from external Wi-Fi status, AP start and stop commands, connection failure recovery, and watchdog background thread control. |
 

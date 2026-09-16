@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from src.camera.anpr_client import (
+from src.integrations.anpr import (
     get_highest_frequency_plate,
     send_frame_to_anpr_server,
 )
@@ -19,7 +19,7 @@ class TestANPRClient(unittest.TestCase):
         self.assertIsNone(plate_none)
         self.assertEqual(status_none, "EMPTY_IMAGE")
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_argus_success(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -54,7 +54,7 @@ class TestANPRClient(unittest.TestCase):
         self.assertEqual(args[0], "http://127.0.0.1:8000/recognize")
         self.assertIn("file", kwargs["files"])
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_argus_rejected_human(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -77,7 +77,7 @@ class TestANPRClient(unittest.TestCase):
         self.assertIsNone(plate)
         self.assertEqual(status, "REJECTED_HUMAN_DETECTED")
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_argus_no_plate(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -100,7 +100,7 @@ class TestANPRClient(unittest.TestCase):
         self.assertIsNone(plate)
         self.assertEqual(status, "NO_PLATE_DETECTED")
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_fallback_flat_json(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -114,14 +114,14 @@ class TestANPRClient(unittest.TestCase):
         self.assertEqual(plate, "MH12AB1234")
         self.assertEqual(status, "SUCCESS")
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_timeout(self, mock_post):
         mock_post.side_effect = requests.exceptions.Timeout("Read timeout")
         plate, status = send_frame_to_anpr_server(b"fake-bytes")
         self.assertIsNone(plate)
         self.assertEqual(status, "ANPR_TIMEOUT")
 
-    @patch("src.camera.anpr_client.requests.post")
+    @patch("src.integrations.anpr.requests.post")
     def test_send_frame_connection_error(self, mock_post):
         mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
         plate, status = send_frame_to_anpr_server(b"fake-bytes")

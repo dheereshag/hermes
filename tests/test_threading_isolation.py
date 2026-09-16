@@ -3,9 +3,9 @@ import time
 import unittest
 from unittest.mock import patch
 
-from src.camera.session_manager import SessionPhase, WeighbridgeSessionManager
 from src.config.config_manager import ConfigManager
-from src.scale.scale_stability import ScaleStabilityMachine
+from src.core.session import SessionPhase, WeighbridgeSessionManager
+from src.core.stability import ScaleStabilityMachine
 
 
 class TestThreadingIsolation(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestThreadingIsolation(unittest.TestCase):
         package = {"session_id": "TEST_SESSION_ASYNC", "weight": 25000.0}
 
         start_time = time.time()
-        with patch("src.network.cloud_post.post_to_cloud", side_effect=slow_post_to_cloud):
+        with patch("src.integrations.gluvok.post_to_cloud", side_effect=slow_post_to_cloud):
             upload_thread = machine._trigger_upload(package)
 
         elapsed = time.time() - start_time
@@ -33,7 +33,7 @@ class TestThreadingIsolation(unittest.TestCase):
         upload_thread.join(timeout=1.0)
         self.assertTrue(called_event.is_set())
 
-    @patch("src.camera.session_manager.capture_auxiliary_snapshots")
+    @patch("src.core.session.capture_auxiliary_snapshots")
     def test_on_weight_stabilized_is_non_blocking(self, mock_capture):
         sm = WeighbridgeSessionManager()
         aux_captured_event = threading.Event()

@@ -1,27 +1,31 @@
 """
-scale_stability.py
+stability.py — Scale Weight Stability & Session Trigger Machine
+==============================================================
 Weight session state machine with 10-second continuous stability detection.
 Integrates with WeighbridgeSessionManager for camera captures and ANPR processing.
 One transmission per session; resets only when weight returns to zero.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 import time
 from enum import Enum
+from typing import Any
 
-from src.camera.session_manager import session_manager
 from src.config.config_manager import config
+from src.config.constants import STABILITY_DURATION, STABILITY_TOLERANCE
+from src.core.session import session_manager
 
 logger = logging.getLogger(__name__)
 
-class ScaleState(Enum):
-    SCALE_IDLE             = 0
-    SCALE_STABILIZING      = 1
-    SCALE_STABLE_RECORDED  = 2
 
-STABILITY_TOLERANCE = 2.0    # ±2.0 kg allowed variation
-STABILITY_DURATION  = 10.0   # 10 seconds continuous stability required
+class ScaleState(Enum):
+    SCALE_IDLE = 0
+    SCALE_STABILIZING = 1
+    SCALE_STABLE_RECORDED = 2
+
 
 class ScaleStabilityMachine:
     def __init__(self):
@@ -104,9 +108,8 @@ class ScaleStabilityMachine:
 
         self._evaluate_stability_window(parsed_weight, now)
 
-    def _trigger_upload(self, session_package: dict) -> threading.Thread:
-        # Import here to avoid circular imports
-        from src.network.cloud_post import post_to_cloud
+    def _trigger_upload(self, session_package: dict[str, Any]) -> threading.Thread:
+        from src.integrations.gluvok import post_to_cloud
 
         session_id = str(session_package.get("session_id", "unknown"))
         upload_thread = threading.Thread(
@@ -130,18 +133,30 @@ class ScaleStabilityMachine:
         self._last_printed_weight = -9999.0
         session_manager.reset_session()
 
+
 # Module-level singleton
 scale_state_machine = ScaleStabilityMachine()
 
-# Convenience function used by scale_uart.py
+
 def process_new_weight(weight: float):
+    """Convenience function used by scale driver."""
     scale_state_machine.process_new_weight(weight)
 
-# Expose current state
+
 def get_scale_state() -> ScaleState:
+    """Expose current state."""
     return scale_state_machine.state
+
 
 def get_current_weight() -> float:
     return scale_state_machine.last_weight
 
 
+__all__ = [
+    "ScaleStabilityMachine",
+    "ScaleState",
+    "get_current_weight",
+    "get_scale_state",
+    "process_new_weight",
+    "scale_state_machine",
+]

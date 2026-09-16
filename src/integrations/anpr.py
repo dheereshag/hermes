@@ -1,3 +1,10 @@
+"""
+anpr.py — Argus ANPR Microservice REST Client
+=============================================
+Sends raw JPEG frames to the Argus ANPR endpoint (/recognize), parses plate results,
+and computes consensus vehicle plate numbers via frequency counting.
+"""
+
 from __future__ import annotations
 
 import json
@@ -7,15 +14,15 @@ from collections.abc import Sequence
 
 import requests
 
-from src.config.camera_config import ANPR_SERVER_TIMEOUT, get_anpr_server_url
 from src.config.config_manager import config
+from src.config.constants import ANPR_SERVER_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
 
 def resolve_anpr_endpoint(url: str | None = None) -> str:
     """Resolves ANPR server URL, replacing 0.0.0.0 with 127.0.0.1 and appending /recognize if omitted."""
-    raw = (url or config.anpr_server_url or get_anpr_server_url()).strip()
+    raw = (url or config.anpr_server_url or "http://127.0.0.1:8000/recognize").strip()
     raw = raw.replace("://0.0.0.0", "://127.0.0.1")
     raw = raw.rstrip("/")
     if not raw.endswith("/recognize"):
@@ -166,3 +173,9 @@ def get_highest_frequency_plate(plate_list: Sequence[str | None]) -> str:
     )
     return most_common_plate
 
+
+__all__ = [
+    "get_highest_frequency_plate",
+    "resolve_anpr_endpoint",
+    "send_frame_to_anpr_server",
+]

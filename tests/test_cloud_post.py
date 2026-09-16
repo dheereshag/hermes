@@ -6,9 +6,12 @@ from unittest.mock import Mock, patch
 import requests
 
 from src.config.config_manager import config
-from src.network.cloud_client import get_device_headers
-from src.network.cloud_post import _build_entry_payload, post_to_cloud
-from src.web.state import get_error_counts, get_system_events, reset_state
+from src.core.telemetry import get_error_counts, get_system_events, reset_state
+from src.integrations.gluvok import (
+    _build_entry_payload,
+    get_device_headers,
+    post_to_cloud,
+)
 
 
 class TestCloudPost(unittest.TestCase):
@@ -48,7 +51,7 @@ class TestCloudPost(unittest.TestCase):
         self.assertTrue(payload["images"][0].startswith("data:image/jpeg;base64,"))
         self.assertNotIn("status", payload)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_success_201(self, mock_post: Mock):
         mock_resp = Mock(status_code=201, content=b'{"data": {"id": 99}}')
         mock_resp.json.return_value = {"data": {"id": 99}}
@@ -78,7 +81,7 @@ class TestCloudPost(unittest.TestCase):
         events = get_system_events()
         self.assertTrue(any("Entry #99 created" in ev["message"] for ev in events))
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_aborts_when_credentials_missing(self, mock_post: Mock):
         config.device_key = ""
         session = {"weight": 1000.0, "anpr_plate": "MH12AB1234"}
@@ -89,7 +92,7 @@ class TestCloudPost(unittest.TestCase):
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_AUTH_FAILED", 0), 1)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_401_unauthorized(self, mock_post: Mock):
         mock_resp = Mock(status_code=401, content=b"Unauthorized", text="Unauthorized")
         mock_post.return_value = mock_resp
@@ -100,7 +103,7 @@ class TestCloudPost(unittest.TestCase):
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_AUTH_FAILED", 0), 1)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_403_forbidden(self, mock_post: Mock):
         mock_resp = Mock(status_code=403, content=b"Forbidden", text="Device deactivated")
         mock_post.return_value = mock_resp
@@ -111,7 +114,7 @@ class TestCloudPost(unittest.TestCase):
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_AUTH_FORBIDDEN", 0), 1)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_400_bad_request(self, mock_post: Mock):
         mock_resp = Mock(status_code=400, content=b"Bad Request", text="Invalid weight")
         mock_post.return_value = mock_resp
@@ -122,7 +125,7 @@ class TestCloudPost(unittest.TestCase):
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_VALIDATION_ERROR", 0), 1)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_500_server_error(self, mock_post: Mock):
         mock_resp = Mock(status_code=500, content=b"Server Error", text="Internal Error")
         mock_post.return_value = mock_resp
@@ -133,7 +136,7 @@ class TestCloudPost(unittest.TestCase):
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_UPLOAD_ERROR", 0), 1)
 
-    @patch("src.network.cloud_post.requests.post")
+    @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_network_exception(self, mock_post: Mock):
         mock_post.side_effect = requests.ConnectionError("Connection refused")
 

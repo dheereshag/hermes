@@ -8,18 +8,18 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from src.config.config_manager import config
+from src.core.telemetry import (
+    get_error_counts,
+    get_latest_weighment,
+    get_system_events,
+    record_system_event,
+)
 from src.web.auth import (
     auth_required,
     create_session_token,
     is_rate_limited,
     record_failed_login,
     verify_credentials,
-)
-from src.web.state import (
-    get_error_counts,
-    get_latest_weighment,
-    get_system_events,
-    record_system_event,
 )
 from src.web.validation import validate_config_payload
 
@@ -51,7 +51,7 @@ def _apply_uart_config_changes(
         return
 
     try:
-        from src.scale.scale_uart import get_uart_reader
+        from src.devices.scale import get_uart_reader
         get_uart_reader().restart(config.serial_port, config.serial_baudrate)
         record_system_event(
             "SCALE",
@@ -95,9 +95,9 @@ def login():
 @api_bp.route("/status", methods=["GET"])
 def status():
     """Returns complete real-time operational telemetry snapshot."""
-    from src.camera.anpr_client import resolve_anpr_endpoint
-    from src.network.wifi_manager import is_hotspot_active, is_wifi_connected
-    from src.scale.scale_stability import get_current_weight, get_scale_state
+    from src.core.stability import get_current_weight, get_scale_state
+    from src.devices.wifi import is_hotspot_active, is_wifi_connected
+    from src.integrations.anpr import resolve_anpr_endpoint
 
     target_argus_url = resolve_anpr_endpoint(config.anpr_server_url)
     argus_online = _check_argus_online(target_argus_url)
@@ -205,7 +205,7 @@ def post_wifi():
     config.update_wifi_credentials(ssid, password)
     record_system_event("CONFIG", f"Saved Wi-Fi SSID '{ssid}' to config.json. Attempting connection...")
 
-    from src.network.wifi_manager import connect_to_wifi
+    from src.devices.wifi import connect_to_wifi
     is_connected, msg = connect_to_wifi(ssid, password)
 
     if is_connected:

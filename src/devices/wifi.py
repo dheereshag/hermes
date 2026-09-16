@@ -1,7 +1,8 @@
 """
-wifi_manager.py
+wifi.py — Raspberry Pi Wi-Fi & Emergency Hotspot Driver
+======================================================
 Manages Raspberry Pi Wi-Fi connectivity and automatic emergency Access Point (Hotspot) fallback.
-Uses NetworkManager (`nmcli`) to detect connection drops and spin up the 'Gluvok-Setup' hotspot.
+Uses NetworkManager (nmcli) to detect connection drops and spin up the 'Gluvok-Setup' hotspot.
 """
 
 from __future__ import annotations
@@ -11,11 +12,14 @@ import shutil
 import subprocess
 import threading
 
-logger = logging.getLogger(__name__)
+from src.config.constants import (
+    DEFAULT_HOTSPOT_PASS,
+    DEFAULT_HOTSPOT_SSID,
+    DEFAULT_WIFI_WATCHDOG_INTERVAL,
+    HOTSPOT_CON_NAME,
+)
 
-HOTSPOT_CON_NAME = "Gluvok-Hotspot"
-DEFAULT_HOTSPOT_SSID = "Gluvok-Setup"
-DEFAULT_HOTSPOT_PASS = "gluvok1234"
+logger = logging.getLogger(__name__)
 
 _hotspot_active = False
 _watchdog_thread: threading.Thread | None = None
@@ -220,7 +224,7 @@ def _watchdog_loop(interval: float):
     logger.info("[WiFi Watchdog] Stopped network monitoring.")
 
 
-def start_wifi_watchdog(interval: float = 30.0):
+def start_wifi_watchdog(interval: float = DEFAULT_WIFI_WATCHDOG_INTERVAL):
     """Starts the background Wi-Fi monitoring thread."""
     global _watchdog_thread
     if _watchdog_thread and _watchdog_thread.is_alive():
@@ -239,3 +243,18 @@ def start_wifi_watchdog(interval: float = 30.0):
 def stop_wifi_watchdog():
     """Stops the background Wi-Fi monitoring thread."""
     _watchdog_stop_event.set()
+
+
+__all__ = [
+    "DEFAULT_HOTSPOT_PASS",
+    "DEFAULT_HOTSPOT_SSID",
+    "HOTSPOT_CON_NAME",
+    "connect_to_wifi",
+    "is_hotspot_active",
+    "is_nmcli_available",
+    "is_wifi_connected",
+    "start_emergency_hotspot",
+    "start_wifi_watchdog",
+    "stop_emergency_hotspot",
+    "stop_wifi_watchdog",
+]

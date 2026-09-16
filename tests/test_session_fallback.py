@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from src.camera.session_manager import SessionPhase, WeighbridgeSessionManager
+from src.core.session import SessionPhase, WeighbridgeSessionManager
 
 
 class TestSessionErrorFallback(unittest.TestCase):
@@ -11,8 +11,8 @@ class TestSessionErrorFallback(unittest.TestCase):
     def tearDown(self):
         self.sm.reset_session()
 
-    @patch("src.camera.session_manager.send_frame_to_anpr_server")
-    @patch("src.camera.session_manager.fetch_image_bytes")
+    @patch("src.core.session.send_frame_to_anpr_server")
+    @patch("src.core.session.fetch_image_bytes")
     def test_session_forwards_error_code_and_includes_truck_image(self, mock_fetch, mock_send):
         fake_truck_frame = b"\xff\xd8\xff\xe0\x00\x10JFIF_TRUCK_FRAME"
         mock_fetch.return_value = fake_truck_frame
@@ -41,8 +41,8 @@ class TestSessionErrorFallback(unittest.TestCase):
         # 2. Verify the truck image is still present in the final package
         self.assertEqual(pkg["cam1_final_image"], fake_truck_frame)
 
-    @patch("src.camera.session_manager.send_frame_to_anpr_server")
-    @patch("src.camera.session_manager.fetch_image_bytes")
+    @patch("src.core.session.send_frame_to_anpr_server")
+    @patch("src.core.session.fetch_image_bytes")
     def test_session_prefers_valid_plate_over_transient_errors(self, mock_fetch, mock_send):
         fake_truck_frame = b"\xff\xd8\xff\xe0\x00\x10JFIF_TRUCK_FRAME"
         mock_fetch.return_value = fake_truck_frame

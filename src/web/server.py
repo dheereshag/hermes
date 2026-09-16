@@ -5,8 +5,7 @@ import threading
 
 from werkzeug.serving import BaseWSGIServer, make_server
 
-from src.web.app import create_app
-from src.web.state import (
+from src.core.telemetry import (
     get_error_counts,
     get_latest_weighment,
     get_system_events,
@@ -15,6 +14,7 @@ from src.web.state import (
     record_weighment_result,
     reset_state,
 )
+from src.web.app import create_app
 
 logger = logging.getLogger(__name__)
 

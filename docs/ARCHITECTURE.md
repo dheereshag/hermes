@@ -46,41 +46,42 @@ graph TD
 
 ## 2. Component Breakdown
 
-### 2.1 Scale Subsystem (`src/scale/`)
-- **`ScaleUARTReader` (`scale_uart.py`)**:
-  - Connects to the weighing indicator via serial (`/dev/ttyAMA0` or USB serial at 1200 baud, 8N1).
-  - Maintains a thread-safe byte buffer (`bytearray`), handling packet terminators (`\r`, `\n`, STX `\x02`, ETX `\x03`) and an inter-character silence flush (300 ms).
-  - Uses regex extraction (`rb"([0-9]{3,6})MN"` and flexible signed float patterns) to parse numeric weights.
-- **`ScaleStabilityMachine` (`scale_stability.py`)**:
+### 2.1 Core Business Logic (`src/core/`)
+- **`WeighbridgeSessionManager` (`session.py`)**:
+  - Coordinates the session lifecycle (`PHASE_IDLE` -> `PHASE_STABILIZING` -> `PHASE_POST_STABILITY` -> `PHASE_COMPLETED`).
+  - Runs a 2-second capture loop on Camera 1 during the stabilization phase.
+  - Assembles the final session package containing stable weight, highest-voted plate, and base64 images.
+- **`ScaleStabilityMachine` (`stability.py`)**:
   - Requires weight to exceed `min_weight` (default `50.0 kg`) to trigger a weighing session.
   - Implements a continuous 10-second stability check (`STABILITY_TOLERANCE = ±2.0 kg`, `STABILITY_DURATION = 10.0s`).
   - Once stable, transitions to `SCALE_STABLE_RECORDED` to guarantee strictly one upload per truck session.
   - Resets to `SCALE_IDLE` only when weight drops back to `<= 0.0 kg`.
+- **`Telemetry Store` (`telemetry.py`)**:
+  - Decoupled, thread-safe store for circular system event logs (`max 20 entries`), latest weighment results, and live error counters.
+  - Guards state using dedicated threading locks (`_events_lock`, `_live_lock`).
 
-### 2.2 Camera & ANPR Subsystem (`src/camera/`)
-- **`camera_manager.py`**:
+### 2.2 Physical Hardware Devices (`src/devices/`)
+- **`ScaleUARTReader` (`scale.py`)**:
+  - Connects to the weighing indicator via serial (`/dev/ttyAMA0` or USB serial at 1200 baud, 8N1).
+  - Maintains a thread-safe byte buffer (`bytearray`), handling packet terminators (`\r`, `\n`, STX `\x02`, ETX `\x03`) and an inter-character silence flush (300 ms).
+  - Uses regex extraction (`rb"([0-9]{3,6})MN"` and flexible signed float patterns) to parse numeric weights.
+- **`Camera Manager` (`camera.py`)**:
   - Low-memory HTTP snapshot grabber with optional OpenCV RTSP single-frame fallback.
   - Concurrently captures overview angles (Cameras 2..N) upon stabilization using a bounded `ThreadPoolExecutor`.
-- **`anpr_client.py`**:
+- **`WiFi Manager` (`wifi.py`)**:
+  - Continuously monitors active Wi-Fi connection via `nmcli`.
+  - Automatically spins up an emergency Wi-Fi Access Point (`Gluvok-Setup` / `gluvok1234`) on `wlan0` if connection to the facility router is lost, allowing on-site technicians to connect directly.
+
+### 2.3 External Integrations (`src/integrations/`)
+- **`Argus ANPR Client` (`anpr.py`)**:
   - Sends raw JPEG bytes to the Argus FastAPI microservice endpoint (`/recognize`).
   - Supports both full Argus `RecognitionResponse` schemas and flat JSON schemas with pre-screening error detection (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`).
   - Employs a frequency counter (`get_highest_frequency_plate`) to pick the consensus plate candidate across multi-sample captures.
-- **`session_manager.py`**:
-  - Coordinates the session lifecycle (`PHASE_IDLE` -> `PHASE_STABILIZING` -> `PHASE_POST_STABILITY` -> `PHASE_COMPLETED`).
-  - Runs a 2-second capture loop on Camera 1 during the stabilization phase.
-  - Assembles the final session package containing stable weight, highest-voted plate, and base64 images.
-
-### 2.3 Network & Cloud Subsystem (`src/network/`)
-- **`cloud_client.py`**:
-  - Exposes `GLUVOK_BASE_URL` and `get_device_headers()` for edge device authentication.
-  - Formats custom request headers (`x-device-id`, `x-device-key`) for stateless API verification. Gluvok may update device heartbeat fields (e.g. `last_seen_at`) server-side; Hermes does not set them locally.
-- **`cloud_post.py`**:
+- **`Gluvok Cloud API Client` (`gluvok.py`)**:
+  - Exposes `GLUVOK_BASE_URL` and `get_device_headers()` for stateless edge device authentication (`x-device-id`, `x-device-key`).
   - Validates and sanitizes license plate numbers against Indian registration number patterns (`INDIAN_PLATE_REGEX`).
-  - Posts weighment session data and RFC 2397 base64-encoded snapshot images directly to `POST /api/entries`.
-  - Handles response status codes: `200`/`201` success (records entry ID), `401 Unauthorized` (missing credentials), `403 Forbidden` (deactivated or invalid device), `400 Bad Request` (validation error), and other non-success statuses.
-- **`wifi_manager.py`**:
-  - Continuously monitors active Wi-Fi connection via `nmcli`.
-  - Automatically spins up an emergency Wi-Fi Access Point (`Gluvok-Setup` / `gluvok1234`) on `wlan0` if connection to the facility router is lost, allowing on-site technicians to connect directly.
+  - Structures weighment session data and RFC 2397 base64-encoded snapshot images directly for `POST /api/entries`.
+  - Handles response status codes: `200`/`201` success, `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and server/network errors.
 
 ### 2.4 Diagnostics Web Dashboard (`src/web/`)
 - **Application Factory (`app.py`)**:
@@ -92,8 +93,6 @@ graph TD
     - `GET /api/status`: Real-time operational telemetry snapshot.
     - `GET /api/config` & `POST /api/config`: Live reconfiguration of threshold weight, serial port/baud, and camera URLs with input sanitization (`validation.py`) and dynamic UART restart.
     - `POST /api/wifi` & `POST /api/wifi/clear`: Facility Wi-Fi provisioning and credential clearing.
-- **State & Telemetry Store (`state.py`)**:
-  - Thread-safe decoupled store for circular system event logs (`max 20 entries`), latest weighment results, and live error counters.
 - **Authentication & Security Middleware (`auth.py`)**:
   - Cryptographic token generator and `@auth_required` decorator supporting `Authorization: Bearer` and `X-Auth-Token` headers.
 - **Server Runner (`server.py`)**:
@@ -101,10 +100,10 @@ graph TD
 
 ### 2.5 Configuration Management (`src/config/`)
 - **`config_manager.py`**:
-  - Persistent JSON-backed storage (`config.json`).
-  - Singleton providing system-wide settings with fallback defaults and disk persistence.
-- **`camera_config.py`**:
-  - Dynamic getters for camera snapshot and ANPR endpoints, reflecting changes saved via the web dashboard immediately.
+  - Persistent JSON-backed storage (`config.json`) with `threading.RLock()` synchronization.
+  - Singleton providing system-wide settings with fallback defaults, disk persistence, and dynamic getters for camera and ANPR URLs.
+- **`constants.py`**:
+  - Centralized repository of all system constants, timing windows, timeouts, buffer sizes, and validation regexes.
 
 ---
 
@@ -158,5 +157,5 @@ Under Python 3.14, threads execute with true hardware parallelism across all 4 C
 - **`ConfigManager`**: All mutable properties and disk serialization (`config.json`) are guarded by `threading.RLock()`.
 - **`ScaleUARTReader`**: Line buffer bytearray and inter-character timeout tracking are synchronized via `threading.Lock()`.
 - **`WeighbridgeSessionManager`**: Phase transitions, frame buffers, and candidate plate lists are guarded by `threading.Lock()`.
-- **`state.py`**: Telemetry circular buffer and live error statistics are guarded by `_events_lock` and `_live_lock`.
+- **`telemetry.py`**: Telemetry circular buffer and live error statistics are guarded by `_events_lock` and `_live_lock`.
 

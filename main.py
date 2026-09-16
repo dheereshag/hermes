@@ -3,11 +3,12 @@ main.py — Gluvok Weighment & ANPR Integration
 ==============================================
 Core weighment indicator and ANPR multi-camera capture application.
 
-Module map:
-  src/config/    — JSON-backed settings manager & camera configurations
-  src/network/   — Device-header auth, payload POST, Wi-Fi watchdog
-  src/scale/     — PySerial UART stream reader, 10s stability state machine
-  src/camera/    — Multi-camera snapshots, ANPR client, session lifecycle
+Layer architecture:
+  src/core/         — Session lifecycle coordinator & 10s stability state machine
+  src/devices/      — Hardware drivers (Scale serial stream, Cameras, Wi-Fi watchdog)
+  src/integrations/ — External services (Argus ANPR microservice, Gluvok Cloud API)
+  src/web/          — Diagnostics web console (:8080) & local REST APIs
+  src/config/       — Centralized settings & operational constants
 """
 
 import logging
@@ -24,13 +25,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Import core modules ───────────────────────────────────────────────────────
-from src.camera.session_manager import session_manager
-from src.config.config_manager import config
-from src.network.wifi_manager import start_wifi_watchdog, stop_wifi_watchdog
-from src.scale.scale_stability import scale_state_machine
-from src.scale.scale_uart import get_uart_reader
-from src.web.server import start_web_server, stop_web_server
+# ── Import decoupled layer modules ───────────────────────────────────────────
+from src.config import config
+from src.core import scale_state_machine, session_manager
+from src.devices import get_uart_reader, start_wifi_watchdog, stop_wifi_watchdog
+from src.web import start_web_server, stop_web_server
 
 
 # ── Graceful shutdown ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 """
-session_manager.py
+session.py — Weighbridge Session Lifecycle Orchestrator
+======================================================
 Manages weighbridge session lifecycle, Camera 1 ANPR capture loop thread,
 auxiliary camera snapshots, 10-second post-stabilization timing, and data packaging.
 """
@@ -15,15 +16,16 @@ from typing import Any
 
 import requests
 
-from src.camera.anpr_client import (
-    get_highest_frequency_plate,
-    send_frame_to_anpr_server,
-)
-from src.camera.camera_manager import capture_auxiliary_snapshots, fetch_image_bytes
-from src.config.camera_config import (
+from src.config.config_manager import config
+from src.config.constants import (
     ANPR_CAPTURE_INTERVAL,
     POST_STABILITY_DURATION,
-    get_anpr_camera_url,
+)
+from src.core.telemetry import record_system_event, record_weighment_result
+from src.devices.camera import capture_auxiliary_snapshots, fetch_image_bytes
+from src.integrations.anpr import (
+    get_highest_frequency_plate,
+    send_frame_to_anpr_server,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,13 +77,13 @@ class WeighbridgeSessionManager:
             self._anpr_thread = threading.Thread(
                 target=self._anpr_loop,
                 name=f"ANPRLoop_{self.session_id}",
-                daemon=True
+                daemon=True,
             )
             self._anpr_thread.start()
 
     def _capture_and_record_anpr_sample(self) -> None:
         """Fetch one Camera 1 frame, buffer it, and record ANPR plate/status."""
-        img_bytes = fetch_image_bytes(get_anpr_camera_url())
+        img_bytes = fetch_image_bytes(config.anpr_camera_url)
         if not img_bytes:
             return
 
@@ -235,9 +237,8 @@ def _record_session_telemetry(
     weight: float,
     is_error: bool,
 ) -> None:
-    """Bridge completed session outcome to local web server live telemetry feed."""
+    """Bridge completed session outcome to core telemetry store."""
     try:
-        from src.web.server import record_system_event, record_weighment_result
         record_weighment_result(
             session_id=str(session_id),
             plate=plate,
@@ -256,3 +257,8 @@ def _record_session_telemetry(
 # Module-level singleton
 session_manager = WeighbridgeSessionManager()
 
+__all__ = [
+    "SessionPhase",
+    "WeighbridgeSessionManager",
+    "session_manager",
+]

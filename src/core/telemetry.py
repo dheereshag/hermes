@@ -1,3 +1,12 @@
+"""
+telemetry.py — Core System Events & Weighment Telemetry Store
+============================================================
+Decoupled, thread-safe central telemetry buffer. Stores:
+- Circular system events log (max 20 entries)
+- Latest weighment session outcome
+- Live error frequency counters
+"""
+
 from __future__ import annotations
 
 import threading
@@ -75,8 +84,8 @@ def get_system_events() -> list[dict[str, str]]:
         return list(_system_events)
 
 
-def reset_state() -> None:
-    """Resets in-memory telemetry buffers (useful for testing)."""
+def reset_telemetry() -> None:
+    """Resets in-memory telemetry buffers (useful for testing and reset flows)."""
     with _events_lock:
         _system_events.clear()
     with _live_lock:
@@ -87,3 +96,18 @@ def reset_state() -> None:
         _latest_weighment["is_error"] = False
         _latest_weighment["status_code"] = "READY"
         _error_counts.clear()
+
+
+# Convenience alias matching legacy tests/callers
+reset_state = reset_telemetry
+
+__all__ = [
+    "get_error_counts",
+    "get_latest_weighment",
+    "get_system_events",
+    "record_error_event",
+    "record_system_event",
+    "record_weighment_result",
+    "reset_state",
+    "reset_telemetry",
+]

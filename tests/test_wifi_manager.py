@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.network.wifi_manager import (
+from src.devices.wifi import (
     connect_to_wifi,
     is_hotspot_active,
     is_wifi_connected,
@@ -17,8 +17,8 @@ class TestWiFiManager(unittest.TestCase):
         stop_wifi_watchdog()
         stop_emergency_hotspot()
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_is_wifi_connected_true(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
@@ -27,8 +27,8 @@ class TestWiFiManager(unittest.TestCase):
 
         self.assertTrue(is_wifi_connected())
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_is_wifi_connected_false_when_disconnected(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
@@ -37,8 +37,8 @@ class TestWiFiManager(unittest.TestCase):
 
         self.assertFalse(is_wifi_connected())
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_is_wifi_connected_false_when_in_hotspot_mode(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
@@ -48,8 +48,8 @@ class TestWiFiManager(unittest.TestCase):
         # If connected connection is the hotspot itself, it shouldn't count as normal wifi
         self.assertFalse(is_wifi_connected())
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_start_and_stop_emergency_hotspot(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
@@ -65,8 +65,8 @@ class TestWiFiManager(unittest.TestCase):
         self.assertTrue(stopped)
         self.assertFalse(is_hotspot_active())
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_connect_to_wifi_success(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
@@ -77,8 +77,8 @@ class TestWiFiManager(unittest.TestCase):
         self.assertTrue(success)
         self.assertIn("Successfully connected", msg)
 
-    @patch("src.network.wifi_manager.is_nmcli_available", return_value=True)
-    @patch("src.network.wifi_manager.subprocess.run")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
     def test_connect_to_wifi_failure(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 1

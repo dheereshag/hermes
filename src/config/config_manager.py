@@ -6,6 +6,12 @@ import os
 import threading
 from typing import Any
 
+from src.config.constants import (
+    DEFAULT_SERIAL_BAUDRATE,
+    DEFAULT_SERIAL_PORT,
+    DEFAULT_WEIGHT_THRESHOLD,
+)
+
 logger = logging.getLogger(__name__)
 
 CONFIG_FILE_PATH = os.path.join(
@@ -20,12 +26,12 @@ class ConfigManager:
         self.wifi_ssid = ""
         self.wifi_password = ""
         self.center_id = 1
-        self.weight_threshold = 50.0
+        self.weight_threshold = DEFAULT_WEIGHT_THRESHOLD
         self.device_id = 1
         self.device_key = ""
         self.anpr_server_url = ""
-        self.serial_port = "/dev/ttyAMA0"
-        self.serial_baudrate = 1200
+        self.serial_port = DEFAULT_SERIAL_PORT
+        self.serial_baudrate = DEFAULT_SERIAL_BAUDRATE
         self.anpr_camera_url = "http://192.168.1.101/cgi-bin/snapshot.cgi"
         self.auxiliary_camera_urls: list[str] = [
             "http://192.168.1.102/cgi-bin/snapshot.cgi",

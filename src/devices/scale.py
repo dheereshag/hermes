@@ -1,6 +1,6 @@
 """
-scale_uart.py
-UART serial stream reader and line parser for the weighing scale indicator.
+scale.py — UART Serial Scale Indicator Driver
+============================================
 Handles: persistent character buffering, packet terminators (\r, \n, STX, ETX),
 inter-packet timeout flush (300ms), flexible numeric extraction, and
 automatic reconnect resilience for industrial deployments.
@@ -16,28 +16,30 @@ import time
 import serial
 
 from src.config.config_manager import config as app_config
+from src.config.constants import (
+    DEFAULT_SERIAL_BAUDRATE,
+    DEFAULT_SERIAL_PORT,
+    INTER_CHAR_TIMEOUT_S,
+    MAX_BUFFER_LEN,
+    SCALE_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
 
-# Inter-character timeout: flush buffer after 300ms silence (matching ESP32)
-INTER_CHAR_TIMEOUT_S = 0.3
-MAX_BUFFER_LEN = 256
 
 def get_current_serial_port() -> str:
-    return app_config.serial_port or "/dev/ttyAMA0"
+    return app_config.serial_port or DEFAULT_SERIAL_PORT
+
 
 def get_current_baudrate() -> int:
-    return app_config.serial_baudrate or 1200
-
-
-SCALE_TIMEOUT = 0.05  # 50ms non-blocking read timeout
+    return app_config.serial_baudrate or DEFAULT_SERIAL_BAUDRATE
 
 
 class ScaleUARTReader:
     def __init__(self):
-        self._serial = None
+        self._serial: serial.Serial | None = None
         self._running = False
-        self._thread = None
+        self._thread: threading.Thread | None = None
         self._line_buffer = bytearray()
         self._last_char_time = 0.0
         self._lock = threading.Lock()
@@ -138,13 +140,13 @@ class ScaleUARTReader:
 
             self._read_incoming_bytes()
 
-    def handle_scale_char(self, c):
+    def handle_scale_char(self, c: str | int | bytes | bytearray):
         """
         Consumes a single character/byte or string/bytes into persistent buffer.
         Triggers parsing on packet terminators (CR, LF, STX, ETX) or when max buffer length is reached.
         """
         if isinstance(c, str):
-            char_bytes = c.encode('utf-8', errors='ignore')
+            char_bytes = c.encode("utf-8", errors="ignore")
         elif isinstance(c, int):
             char_bytes = bytes([c])
         elif isinstance(c, (bytes, bytearray)):
@@ -193,7 +195,7 @@ class ScaleUARTReader:
                 pass
 
         # 2. Fallback flexible numeric extraction (supports signed float/int e.g. +05000.5 or -12.5)
-        text = buf.decode('utf-8', errors='ignore')
+        text = buf.decode("utf-8", errors="ignore")
         m_flex = re.search(r"([-+]?\d+(?:\.\d+)?)", text)
         if m_flex:
             try:
@@ -203,18 +205,32 @@ class ScaleUARTReader:
             except ValueError:
                 pass
 
+
 # Module-level singleton and callback bridge
 _uart_reader = ScaleUARTReader()
 
-def handle_scale_char(c):
+
+def handle_scale_char(c: str | int | bytes | bytearray):
     """Called per-character/byte from external sources (for testing or alternate serial readers)."""
     _uart_reader.handle_scale_char(c)
+
 
 def handle_scale_char_processed(weight: float):
     """Bridge to stability state machine — called after a weight value is extracted."""
     logger.info(f"[Scale] Parsed weight: {weight:.3f} kg")
-    from src.scale.scale_stability import process_new_weight
+    from src.core.stability import process_new_weight
     process_new_weight(weight)
+
 
 def get_uart_reader() -> ScaleUARTReader:
     return _uart_reader
+
+
+__all__ = [
+    "ScaleUARTReader",
+    "get_current_baudrate",
+    "get_current_serial_port",
+    "get_uart_reader",
+    "handle_scale_char",
+    "handle_scale_char_processed",
+]

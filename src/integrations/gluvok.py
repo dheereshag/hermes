@@ -1,3 +1,10 @@
+"""
+gluvok.py — Gluvok Cloud API Integration Client
+===============================================
+Handles stateless IoT device authentication, Indian vehicle plate sanitization,
+RFC 2397 base64 payload construction, and POST transmission to Gluvok API (/api/entries).
+"""
+
 from __future__ import annotations
 
 import base64
@@ -8,14 +15,26 @@ from typing import Any
 import requests
 
 from src.config.config_manager import config
-from src.network.cloud_client import GLUVOK_BASE_URL, get_device_headers
+from src.config.constants import (
+    CLOUD_POST_TIMEOUT,
+    GLUVOK_BASE_URL,
+    INDIAN_PLATE_REGEX,
+)
+from src.core.telemetry import record_error_event, record_system_event
 
 logger = logging.getLogger(__name__)
 
-# Pattern for Indian vehicle registration numbers (e.g. MH12AB1234, DL1CAB1234, 22BH1234AA)
-INDIAN_PLATE_REGEX = re.compile(
-    r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"
-)
+
+def get_device_headers() -> dict[str, str]:
+    """
+    Returns custom authentication headers required for edge device requests.
+    - x-device-id: Integer primary key from the devices table
+    - x-device-key: Raw pre-shared key
+    """
+    return {
+        "x-device-id": str(config.device_id),
+        "x-device-key": config.device_key,
+    }
 
 
 def sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]:
@@ -67,17 +86,12 @@ def _build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -> None:
-    """Safely logs system and error events to the diagnostics web store."""
-    try:
-        from src.web.server import record_error_event, record_system_event
-
-        if is_error:
-            record_error_event(event_type, message)
-            record_system_event("CLOUD", f"Upload error ({event_type}): {message}")
-        else:
-            record_system_event(event_type, message)
-    except (ImportError, AttributeError):
-        pass
+    """Safely logs system and error events to the core telemetry store."""
+    if is_error:
+        record_error_event(event_type, message)
+        record_system_event("CLOUD", f"Upload error ({event_type}): {message}")
+    else:
+        record_system_event(event_type, message)
 
 
 def _handle_success_response(response: requests.Response, payload: dict[str, Any]) -> None:
@@ -163,10 +177,19 @@ def post_to_cloud(session_payload: dict[str, Any]) -> None:
     }
 
     try:
-        response = requests.post(entries_url, json=payload, headers=headers, timeout=20)
+        response = requests.post(entries_url, json=payload, headers=headers, timeout=CLOUD_POST_TIMEOUT)
         _handle_response_status(response, payload)
     except (requests.RequestException, ValueError, KeyError) as e:
         logger.error(f"[Gluvok API] Network exception during entry transmission: {e}")
         _record_cloud_event("CLOUD_UPLOAD_ERROR", str(e), is_error=True)
     finally:
         session_payload.clear()
+
+
+__all__ = [
+    "GLUVOK_BASE_URL",
+    "_build_entry_payload",
+    "get_device_headers",
+    "post_to_cloud",
+    "sanitize_vehicle_number",
+]
