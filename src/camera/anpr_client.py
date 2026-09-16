@@ -23,30 +23,57 @@ def resolve_anpr_endpoint(url: str | None = None) -> str:
     return raw
 
 
-def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
-    """Extract plate string or status code from Argus / generic JSON response."""
-    results = data.get("results")
-    if isinstance(results, list):
-        for item in results:
-            if isinstance(item, dict):
-                plate_val = item.get("plate")
-                if plate_val and isinstance(plate_val, str) and plate_val.strip() and plate_val.strip().upper() != "N/A":
-                    plate_clean = plate_val.strip().upper()
-                    exec_time = data.get("execution_time_ms", "N/A")
-                    provider = data.get("provider", "unknown")
-                    vtype = data.get("vehicle_type") or "vehicle"
-                    logger.info(
-                        f"[ANPR] Argus recognized plate: '{plate_clean}' "
-                        f"({vtype}, provider={provider}, {exec_time}ms)"
-                    )
-                    return plate_clean, "SUCCESS"
+def _normalize_plate_value(plate_val: object) -> str | None:
+    """Return a cleaned plate string, or None if the value is empty/N/A."""
+    if not plate_val or not isinstance(plate_val, str):
+        return None
+    plate_clean = plate_val.strip().upper()
+    if not plate_clean or plate_clean == "N/A":
+        return None
+    return plate_clean
 
+
+def _plate_from_results_list(data: dict) -> tuple[str, str] | None:
+    """Extract plate from Argus `results[].plate` list if present."""
+    results = data.get("results")
+    if not isinstance(results, list):
+        return None
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        plate_clean = _normalize_plate_value(item.get("plate"))
+        if not plate_clean:
+            continue
+        exec_time = data.get("execution_time_ms", "N/A")
+        provider = data.get("provider", "unknown")
+        vtype = data.get("vehicle_type") or "vehicle"
+        logger.info(
+            f"[ANPR] Argus recognized plate: '{plate_clean}' "
+            f"({vtype}, provider={provider}, {exec_time}ms)"
+        )
+        return plate_clean, "SUCCESS"
+    return None
+
+
+def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:
+    """Extract plate from flat JSON keys used by generic ANPR responses."""
     for key in ("plate", "number_plate", "plate_number", "text", "result"):
-        flat_val = data.get(key)
-        if flat_val and isinstance(flat_val, str) and flat_val.strip() and flat_val.strip().upper() != "N/A":
-            plate_clean = flat_val.strip().upper()
+        plate_clean = _normalize_plate_value(data.get(key))
+        if plate_clean:
             logger.info(f"[ANPR] Server returned plate: '{plate_clean}' (key='{key}')")
             return plate_clean, "SUCCESS"
+    return None
+
+
+def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
+    """Extract plate string or status code from Argus / generic JSON response."""
+    from_results = _plate_from_results_list(data)
+    if from_results is not None:
+        return from_results
+
+    from_flat = _plate_from_flat_keys(data)
+    if from_flat is not None:
+        return from_flat
 
     raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
     if data.get("rejected"):

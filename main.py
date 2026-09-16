@@ -5,7 +5,7 @@ Core weighment indicator and ANPR multi-camera capture application.
 
 Module map:
   src/config/    — JSON-backed settings manager & camera configurations
-  src/network/   — Cloud login, profile resolver, payload POST
+  src/network/   — Device-header auth, payload POST, Wi-Fi watchdog
   src/scale/     — PySerial UART stream reader, 10s stability state machine
   src/camera/    — Multi-camera snapshots, ANPR client, session lifecycle
 """

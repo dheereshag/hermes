@@ -67,6 +67,47 @@ def is_hotspot_active() -> bool:
     return _hotspot_active
 
 
+def _activate_hotspot_connection(ssid: str, password: str) -> None:
+    """Create, configure, and bring up the emergency AP via nmcli."""
+    subprocess.run(
+        ["nmcli", "connection", "delete", HOTSPOT_CON_NAME],
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    subprocess.run(
+        [
+            "nmcli", "connection", "add",
+            "type", "wifi",
+            "ifname", "wlan0",
+            "con-name", HOTSPOT_CON_NAME,
+            "autoconnect", "false",
+            "ssid", ssid,
+        ],
+        capture_output=True,
+        timeout=5,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "nmcli", "connection", "modify", HOTSPOT_CON_NAME,
+            "802-11-wireless.mode", "ap",
+            "802-11-wireless.band", "bg",
+            "ipv4.method", "shared",
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.psk", password,
+        ],
+        capture_output=True,
+        timeout=5,
+        check=True,
+    )
+    subprocess.run(
+        ["nmcli", "connection", "up", HOTSPOT_CON_NAME],
+        capture_output=True,
+        timeout=10,
+        check=True,
+    )
+
 
 def start_emergency_hotspot(
     ssid: str = DEFAULT_HOTSPOT_SSID,
@@ -87,32 +128,7 @@ def start_emergency_hotspot(
             return True
 
         try:
-            # Delete existing hotspot profile if present to ensure clean state
-            subprocess.run(["nmcli", "connection", "delete", HOTSPOT_CON_NAME], capture_output=True, timeout=5, check=False)
-
-            # Create and configure the AP hotspot connection
-            cmd_create = [
-                "nmcli", "connection", "add",
-                "type", "wifi",
-                "ifname", "wlan0",
-                "con-name", HOTSPOT_CON_NAME,
-                "autoconnect", "false",
-                "ssid", ssid,
-            ]
-            subprocess.run(cmd_create, capture_output=True, timeout=5, check=True)
-
-            cmd_modify = [
-                "nmcli", "connection", "modify", HOTSPOT_CON_NAME,
-                "802-11-wireless.mode", "ap",
-                "802-11-wireless.band", "bg",
-                "ipv4.method", "shared",
-                "wifi-sec.key-mgmt", "wpa-psk",
-                "wifi-sec.psk", password,
-            ]
-            subprocess.run(cmd_modify, capture_output=True, timeout=5, check=True)
-
-            # Bring up the hotspot
-            subprocess.run(["nmcli", "connection", "up", HOTSPOT_CON_NAME], capture_output=True, timeout=10, check=True)
+            _activate_hotspot_connection(ssid, password)
             _hotspot_active = True
             logger.info(
                 f"[WiFi] Emergency Access Point active! SSID: '{ssid}' | "

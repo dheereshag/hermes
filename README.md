@@ -20,7 +20,7 @@ Click any file below to open it directly in the IDE:
 ```
 hermes/
 ├── [main.py](file:///Users/d/Downloads/hermes/main.py)                    # Application entry point, setup, and loop
-├── [config.json](file:///Users/d/Downloads/hermes/config.json)                # Local persistent hardware & cloud configuration
+├── config.json                # Runtime hardware & cloud config (gitignored; auto-created on first run)
 ├── [pyproject.toml](file:///Users/d/Downloads/hermes/pyproject.toml)             # Project definition, dependencies, and test config (uv-managed)
 ├── [uv.lock](file:///Users/d/Downloads/hermes/uv.lock)                    # Dependency lockfile
 ├── [README.md](file:///Users/d/Downloads/hermes/README.md)                  # Executive project overview and runbook
@@ -93,6 +93,8 @@ hermes/
 
 ## 🚀 Running the Application on Raspberry Pi
 
+Requires **Python ≥ 3.14** (see `.python-version` / `pyproject.toml`).
+
 ### 1. Install Dependencies
 Ensure [`uv`](https://docs.astral.sh/uv/) is installed, then sync project dependencies:
 ```bash
@@ -100,15 +102,21 @@ uv sync
 ```
 
 ### 2. Configure System Settings
-Configuration is stored in `config.json` and can be adjusted directly or via the local web dashboard:
+Runtime settings live in `config.json`, which is **gitignored** and **auto-created** with defaults on first run if missing. Adjust it directly or via the local web dashboard:
 - `anpr_server_url`: URL to Argus FastAPI endpoint (defaults to `http://127.0.0.1:8000/recognize`).
 - `anpr_camera_url`: Snapshot URL of IP Camera 1.
 - `auxiliary_camera_urls`: List of overview camera snapshot URLs.
 - `serial_port`: Path to UART port (default `/dev/ttyAMA0`).
+- `serial_baudrate`: Serial baud rate (default `1200`).
+- `ssid` / `password`: Facility Wi-Fi credentials (used by the Wi-Fi watchdog / connect APIs).
 - `device_id`: Integer primary key of the edge device from Gluvok's `devices` table (default `1`).
 - `device_key`: Pre-shared secret key for stateless header authentication.
 - `center_id`: Collection center identifier (default `1`).
 - `min_weight`: Minimum threshold in kg to trigger a weighing session (default `50.0`).
+
+Optional environment variables:
+- `SUPERADMIN_USER` / `SUPERADMIN_PASS`: Web dashboard credentials (defaults: `superadmin` / `Gluvok@241821`).
+- `FLASK_SECRET_KEY`: Flask session secret (defaults to an insecure placeholder; set in production).
 
 ### 3. Run Quality Gates & Tests
 Run all verification suites:

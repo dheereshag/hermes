@@ -80,50 +80,54 @@ def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -
         pass
 
 
+def _handle_success_response(response: requests.Response, payload: dict[str, Any]) -> None:
+    """Log and record telemetry for a successful entry creation."""
+    res_data = response.json() if response.content else {}
+    entry_id = res_data.get("data", {}).get("id", "N/A")
+    logger.info(
+        f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})"
+    )
+    _record_cloud_event(
+        "CLOUD",
+        f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload.get('weight')} kg",
+    )
+
+
+def _handle_error_status(status_code: int, response_text: str) -> None:
+    """Log and record telemetry for non-success HTTP statuses."""
+    error_events: dict[int, tuple[str, str, str]] = {
+        401: (
+            "[Gluvok API] 401 Unauthorized: Missing or invalid device authentication headers.",
+            "CLOUD_AUTH_FAILED",
+            "401 Unauthorized: Missing device authentication headers",
+        ),
+        403: (
+            "[Gluvok API] 403 Forbidden: Invalid device key, device not found, or device deactivated.",
+            "CLOUD_AUTH_FORBIDDEN",
+            "403 Forbidden: Invalid device key, not found, or deactivated",
+        ),
+        400: (
+            f"[Gluvok API] 400 Bad Request: Validation failed: {response_text}",
+            "CLOUD_VALIDATION_ERROR",
+            f"400 Bad Request: {response_text}",
+        ),
+    }
+    if status_code in error_events:
+        log_msg, event_type, event_msg = error_events[status_code]
+    else:
+        log_msg = f"[Gluvok API] POST /api/entries failed HTTP {status_code}: {response_text}"
+        event_type = "CLOUD_UPLOAD_ERROR"
+        event_msg = f"HTTP {status_code}"
+    logger.error(log_msg)
+    _record_cloud_event(event_type, event_msg, is_error=True)
+
+
 def _handle_response_status(response: requests.Response, payload: dict[str, Any]) -> None:
     """Evaluates HTTP response status code and logs telemetry events."""
     if response.status_code in (200, 201):
-        res_data = response.json() if response.content else {}
-        entry_id = res_data.get("data", {}).get("id", "N/A")
-        logger.info(
-            f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})"
-        )
-        _record_cloud_event(
-            "CLOUD",
-            f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload.get('weight')} kg",
-        )
-    elif response.status_code == 401:
-        logger.error(
-            "[Gluvok API] 401 Unauthorized: Missing or invalid device authentication headers."
-        )
-        _record_cloud_event(
-            "CLOUD_AUTH_FAILED",
-            "401 Unauthorized: Missing device authentication headers",
-            is_error=True,
-        )
-    elif response.status_code == 403:
-        logger.error(
-            "[Gluvok API] 403 Forbidden: Invalid device key, device not found, or device deactivated."
-        )
-        _record_cloud_event(
-            "CLOUD_AUTH_FORBIDDEN",
-            "403 Forbidden: Invalid device key, not found, or deactivated",
-            is_error=True,
-        )
-    elif response.status_code == 400:
-        logger.error(f"[Gluvok API] 400 Bad Request: Validation failed: {response.text}")
-        _record_cloud_event(
-            "CLOUD_VALIDATION_ERROR",
-            f"400 Bad Request: {response.text}",
-            is_error=True,
-        )
-    else:
-        logger.error(f"[Gluvok API] POST /api/entries failed HTTP {response.status_code}: {response.text}")
-        _record_cloud_event(
-            "CLOUD_UPLOAD_ERROR",
-            f"HTTP {response.status_code}",
-            is_error=True,
-        )
+        _handle_success_response(response, payload)
+        return
+    _handle_error_status(response.status_code, response.text)
 
 
 def post_to_cloud(session_payload: dict[str, Any]) -> None:

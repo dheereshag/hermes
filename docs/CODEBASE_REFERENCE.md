@@ -126,7 +126,7 @@ Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv
 ## 3. Configuration Subsystem (`src/config/`)
 
 ### `src/config/config_manager.py`
-Thread-safe singleton managing configuration loading, schema migration, and JSON disk persistence.
+Singleton managing configuration loading, fallback defaults, and JSON disk persistence (`load_settings` / `_persist`).
 
 #### Class: `ConfigManager`
 - **Attributes**:
@@ -161,7 +161,7 @@ Timing parameters and dynamic getters for camera and ANPR URLs.
   - `ANPR_CAPTURE_INTERVAL = 2.0`: Interval (seconds) between license plate snapshots during weighing.
   - `POST_STABILITY_DURATION = 10.0`: Buffer time (seconds) after scale confirms stable weight before closing the session.
   - `CAMERA_TIMEOUT = 3.0`: Maximum timeout for camera HTTP snapshots.
-  - `ANPR_SERVER_TIMEOUT = 5.0`: Timeout for submitting images to Argus ANPR.
+  - `ANPR_SERVER_TIMEOUT = 15.0`: Timeout for submitting images to Argus ANPR.
   - `MAX_PARALLEL_CAMERA_WORKERS = 4`: ThreadPool worker limit for concurrent auxiliary camera captures.
 - **Functions**:
   - **`get_anpr_camera_url() -> str`**: Returns `config.anpr_camera_url`.
@@ -246,8 +246,8 @@ Argus ANPR microservice client and consensus voting algorithm.
   - `NO_PLATE_DETECTED`: Frame readable but no plate characters recognized.
 - **`_parse_anpr_response(response: requests.Response) -> tuple[str | None, str]`**:
   Extracts plate text and status code from HTTP 200/201 responses.
-- **`send_frame_to_anpr_server(image_bytes: bytes | None, server_url: str | None = None, timeout: float = 5.0) -> tuple[str | None, str]`**:
-  Submits multipart form (`file: frame.jpg`) to `/recognize`. Handles `Timeout` and `ConnectionError` cleanly.
+- **`send_frame_to_anpr_server(image_bytes: bytes | None, server_url: str | None = None, timeout: float = ANPR_SERVER_TIMEOUT) -> tuple[str | None, str]`**:
+  Submits multipart form (`file: frame.jpg`) to `/recognize` (default timeout 15.0s). Handles `Timeout` and `ConnectionError` cleanly.
 - **`get_highest_frequency_plate(plate_list: Sequence[str | None]) -> str`**:
   Consensus voting: computes frequency histogram across all samples collected during the session. Returns the most frequent plate candidate, filtering out intermittent OCR noise.
 
@@ -284,7 +284,7 @@ Weighment record formatting, Indian license plate sanitization, and stateless ba
   `r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"`
   Validates standard state plates (e.g. `MH12AB1234`) and Bharat Series plates (e.g. `22BH1234AA`).
 - **`sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]`**:
-  Returns `(detected_vehicle_number, vehicle_number)`. If ANPR detected an error string (e.g. `NO_PLATE_DETECTED`), forwards the raw error as `detected_vehicle_number` and uses placeholder `MH00XX0000` as `vehicle_number` so the cloud schema validates cleanly.
+  Returns `(detected_vehicle_number, vehicle_number)`. The second value is a sanitized Indian-format candidate (or placeholder `MH00XX0000`). Callers such as `_build_entry_payload` currently discard the second value and send only `detected_vehicle_number` to the cloud.
 - **`_build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]`**:
   Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON payload:
   ```json
@@ -296,7 +296,7 @@ Weighment record formatting, Indian license plate sanitization, and stateless ba
   }
   ```
 - **`post_to_cloud(session_payload: dict[str, Any]) -> None`**:
-  Transmits weighment payload to `POST /api/entries` with custom device headers. Handles HTTP status codes (`201 Created`, `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, `500 Server Error`). Clears raw image memory in caller `session_payload` upon completion.
+  Transmits weighment payload to `POST /api/entries` with custom device headers. Treats HTTP `200` and `201` as success; also handles `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and other non-success statuses. Clears raw image memory in caller `session_payload` upon completion.
 
 ### `src/network/wifi_manager.py`
 Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
@@ -324,12 +324,14 @@ Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
 Flask application factory.
 
 - **`create_app(test_config=None) -> Flask`**:
-  Initializes Flask with template directory set to `src/web/templates`. Registers `views_bp` and `api_bp`.
+  Initializes Flask with template directory set to `src/web/templates`. Registers `views_bp` and `api_bp`. Sets `SECRET_KEY` from `FLASK_SECRET_KEY` (falls back to an insecure placeholder if unset).
 - **`_register_security_headers(app) -> None`**:
   Appends `@app.after_request` headers:
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
   - `Access-Control-Allow-Origin: *`
+  - `Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token`
+  - `Access-Control-Allow-Methods: GET, POST, OPTIONS`
 - **`_register_error_handlers(app) -> None`**:
   Maps HTTP 400, 404, and 500 exceptions to structured JSON responses for `/api/*` endpoints.
 
@@ -343,15 +345,17 @@ Frontend page routes.
 REST API endpoints.
 
 - **`POST /api/login`**:
-  Verifies superadmin credentials with constant-time matching. Enforces rate limiting (max 5 failed attempts/60s). Returns session token on success.
+  Verifies superadmin credentials with constant-time matching. Enforces rate limiting (max 5 failed attempts/60s) and returns HTTP `429` when limited. Returns session token on success.
 - **`GET /api/status`**:
   Returns comprehensive system status JSON:
   - `scale`: Active port, baudrate, `ScaleState`, and live weight in kg.
-  - `argus`: ANPR server URL and live health check boolean.
-  - `cloud`: Center ID and token validity status.
-  - `cameras`: Configured URLs.
+  - `argus`: Resolved ANPR URL and live health check (`GET …/health` derived from `/recognize`).
+  - `cloud`: `center_id`, `device_id`, and `configured` (true when both device ID and key are set).
+  - `cameras`: `cam1_url` and `auxiliary_urls`.
   - `wifi`: Upstream connection status and hotspot active boolean.
+  - `config`: Snapshot of Wi-Fi SSID, device ID, min weight, serial settings, and camera/ANPR URLs.
   - `latest_weighment`: Recent weighment record with timestamp and error flag.
+  - `error_counts`: Live error counters from the telemetry store.
   - `events`: Circular buffer of recent system events.
 - **`GET /api/config`**:
   Returns active threshold weight, serial settings, and camera URLs.
@@ -426,7 +430,7 @@ Hermes contains a comprehensive suite of unit and integration tests executing un
 | [`tests/test_scale_uart.py`](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py) | `TestScaleUARTReader` | Packet parsing (`26500MN\r\n`), split/chunked serial frames, 300ms inter-character silence timeout flush, STX/ETX framing (`\x02...\x03`), and signed float decimals (`+05000.5kg`, `-12.5`). |
 | [`tests/test_anpr_client.py`](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py) | `TestANPRClient` | Empty byte handling, Argus recognition schema parsing (`results[].plate`), pre-screening rejection parsing (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`), flat JSON parsing, network timeout & connection error codes, and highest-frequency consensus plate voting algorithm. |
 | [`tests/test_session_fallback.py`](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) | `TestSessionErrorFallback` | Weighbridge session error propagation (confirming rejected Argus status is forwarded as plate value while still packaging the truck overview image), and consensus preference for valid plates over transient errors. |
-| [`tests/test_cloud_post.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py) | `TestCloudPost` | Stateless device authentication headers (`x-device-id`, `x-device-key`), payload construction, Base64 URI generation, HTTP 201 Created flow, and error handling (401, 403, 400, 500, network exceptions). |
+| [`tests/test_cloud_post.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py) | `TestCloudPost` | Stateless device authentication headers (`x-device-id`, `x-device-key`), payload construction, Base64 URI generation, HTTP 200/201 success flow, and error handling (401, 403, 400, 500, network exceptions). |
 | [`tests/test_web_server.py`](file:///Users/d/Downloads/hermes/tests/test_web_server.py) | `TestFlaskDiagnosticsApp` | Flask web application routes (`/`, `/scale`, `/anpr`, `/cloud`, etc.), `/api/status` schema, Wi-Fi provisioning (`/api/wifi`, `/api/wifi/clear`), configuration updates (`POST /api/config`), input validation, 401 Unauthorized handling, 404 responses, and `FallbackWebServer` thread lifecycle (`start`/`stop`). |
 | [`tests/test_wifi_manager.py`](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py) | `TestWiFiManager` | NetworkManager `nmcli` parsing, active connection detection, exclusion of emergency hotspot from external Wi-Fi status, AP start and stop commands, connection failure recovery, and watchdog background thread control. |
 

@@ -78,30 +78,33 @@ class WeighbridgeSessionManager:
             )
             self._anpr_thread.start()
 
+    def _capture_and_record_anpr_sample(self) -> None:
+        """Fetch one Camera 1 frame, buffer it, and record ANPR plate/status."""
+        img_bytes = fetch_image_bytes(get_anpr_camera_url())
+        if not img_bytes:
+            return
+
+        with self._lock:
+            if len(self._cam1_frames) >= 5:
+                self._cam1_frames.pop(0)
+            self._cam1_frames.append(img_bytes)
+
+        plate, status_code = send_frame_to_anpr_server(img_bytes)
+        with self._lock:
+            if plate:
+                self._cam1_plates.append(plate)
+            self._cam1_statuses.append(status_code)
+
     def _anpr_loop(self):
         """Background thread executing 2-second Camera 1 capture & ANPR requests."""
         logger.info(f"[Session {self.session_id}] Camera 1 ANPR capture loop started.")
         while not self._stop_anpr_event.is_set():
             loop_start = time.time()
-
             try:
-                img_bytes = fetch_image_bytes(get_anpr_camera_url())
-                if img_bytes:
-                    with self._lock:
-                        # Keep only recent frames in RAM to prevent memory bloat
-                        if len(self._cam1_frames) >= 5:
-                            self._cam1_frames.pop(0)
-                        self._cam1_frames.append(img_bytes)
-
-                    plate, status_code = send_frame_to_anpr_server(img_bytes)
-                    with self._lock:
-                        if plate:
-                            self._cam1_plates.append(plate)
-                        self._cam1_statuses.append(status_code)
+                self._capture_and_record_anpr_sample()
             except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
                 logger.error(f"[Session {self.session_id}] Exception in ANPR loop iteration: {e}")
 
-            # Sleep remaining time to maintain 2.0s interval
             elapsed = time.time() - loop_start
             sleep_time = max(0.1, ANPR_CAPTURE_INTERVAL - elapsed)
             time.sleep(sleep_time)

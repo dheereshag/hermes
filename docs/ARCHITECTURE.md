@@ -73,11 +73,11 @@ graph TD
 ### 2.3 Network & Cloud Subsystem (`src/network/`)
 - **`cloud_client.py`**:
   - Exposes `GLUVOK_BASE_URL` and `get_device_headers()` for edge device authentication.
-  - Formats custom request headers (`x-device-id`, `x-device-key`) for stateless API verification and automatic server-side heartbeat tracking (`last_seen_at = NOW()`).
+  - Formats custom request headers (`x-device-id`, `x-device-key`) for stateless API verification. Gluvok may update device heartbeat fields (e.g. `last_seen_at`) server-side; Hermes does not set them locally.
 - **`cloud_post.py`**:
   - Validates and sanitizes license plate numbers against Indian registration number patterns (`INDIAN_PLATE_REGEX`).
   - Posts weighment session data and RFC 2397 base64-encoded snapshot images directly to `POST /api/entries`.
-  - Handles response status codes: `201 Created` (records entry ID), `401 Unauthorized` (missing credentials), `403 Forbidden` (deactivated or invalid device), `400 Bad Request` (validation error), and `500 Server Error`.
+  - Handles response status codes: `200`/`201` success (records entry ID), `401 Unauthorized` (missing credentials), `403 Forbidden` (deactivated or invalid device), `400 Bad Request` (validation error), and other non-success statuses.
 - **`wifi_manager.py`**:
   - Continuously monitors active Wi-Fi connection via `nmcli`.
   - Automatically spins up an emergency Wi-Fi Access Point (`Gluvok-Setup` / `gluvok1234`) on `wlan0` if connection to the facility router is lost, allowing on-site technicians to connect directly.
@@ -102,7 +102,7 @@ graph TD
 ### 2.5 Configuration Management (`src/config/`)
 - **`config_manager.py`**:
   - Persistent JSON-backed storage (`config.json`).
-  - Thread-safe singleton providing system-wide settings with fallback defaults.
+  - Singleton providing system-wide settings with fallback defaults and disk persistence.
 - **`camera_config.py`**:
   - Dynamic getters for camera snapshot and ANPR endpoints, reflecting changes saved via the web dashboard immediately.
 
@@ -128,7 +128,7 @@ sequenceDiagram
     Herm->>Herm: Wait +10s Post-Stability Buffer
     Herm->>Herm: Finalize Vote & Build Payload
     Herm->>Cloud: POST /api/entries (Weight, Plate, Images)
-    Cloud-->>Herm: HTTP 201 Created (Entry ID)
+    Cloud-->>Herm: HTTP 200/201 (Entry ID)
     Scale->>Herm: Weight returns to 0kg
     Herm->>Herm: Reset Session Manager to IDLE
 ```
