@@ -403,8 +403,10 @@
               <div id="cloud-center-id-val" class="text-xl font-bold font-mono text-foreground">1</div>
             </div>
             <div class="p-4 rounded-xl border border-border bg-secondary/30 space-y-2">
-              <span class="text-xs text-muted-foreground font-medium block">Device ID</span>
-              <div id="cloud-device-id-val" class="text-xl font-bold font-mono text-foreground">1</div>
+              <span class="text-xs text-muted-foreground font-medium block">Device Credentials</span>
+              <div class="text-sm font-semibold font-mono text-emerald-400 flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> Secured in Hardware
+              </div>
             </div>
           </div>
         </div>
@@ -524,7 +526,7 @@
         <!-- Configuration Panel (Unlocked) -->
         <div id="config-panel" class="space-y-6 opacity-25 pointer-events-none select-none filter blur-sm transition-all duration-300">
           
-          <!-- Section 1: Weighbridge Indicator Settings -->
+          <!-- Section 1: Weighbridge Indicator & Site Settings -->
           <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
             <div class="flex items-center justify-between pb-4 border-b border-border">
               <div class="flex items-center gap-3">
@@ -532,18 +534,23 @@
                   <i data-lucide="scale" class="w-5 h-5"></i>
                 </div>
                 <div>
-                  <h3 class="text-base font-semibold text-foreground">Weighbridge Hardware Settings</h3>
-                  <p class="text-xs text-muted-foreground">Serial UART indicator device port, baud rate, and minimum weight threshold</p>
+                  <h3 class="text-base font-semibold text-foreground">Weighbridge Hardware & Site Settings</h3>
+                  <p class="text-xs text-muted-foreground">Serial UART indicator device port, baud rate, threshold, and Collection Center ID</p>
                 </div>
               </div>
               <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">LIVE APPLIED</span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div class="space-y-1.5">
                 <label class="text-xs font-medium text-foreground">Threshold Weight (kg)</label>
                 <input id="cfg-min-weight" type="number" step="0.1" min="0" placeholder="50.0" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
                 <p class="text-[11px] text-muted-foreground">Minimum weight to initiate session</p>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Collection Center ID</label>
+                <input id="cfg-center-id" type="number" min="1" step="1" placeholder="1" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+                <p class="text-[11px] text-muted-foreground">Collection center identifier</p>
               </div>
               <div class="space-y-1.5">
                 <label class="text-xs font-medium text-foreground">Serial Port Path</label>
@@ -621,36 +628,7 @@
             </div>
           </div>
 
-          <!-- Section 4: Gluvok Cloud API Credentials -->
-          <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-4">
-            <div class="flex items-center gap-3 pb-3 border-b border-border">
-              <div class="p-2.5 rounded-lg bg-secondary text-primary">
-                <i data-lucide="cloud" class="w-5 h-5"></i>
-              </div>
-              <div>
-                <h3 class="text-base font-semibold text-foreground">Gluvok Cloud API Credentials</h3>
-                <p class="text-xs text-muted-foreground">HTTP Basic Auth credentials and Collection Center ID for cloud weighment uploads</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div class="space-y-1.5">
-                <label class="text-xs font-medium text-foreground">Device ID</label>
-                <input id="cfg-device-id" type="text" placeholder="pi1" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">e.g. pi1, device_01, or numeric ID</p>
-              </div>
-              <div class="space-y-1.5">
-                <label class="text-xs font-medium text-foreground">Device Key</label>
-                <input id="cfg-device-key" type="password" placeholder="hardware123" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">Pre-shared secret password</p>
-              </div>
-              <div class="space-y-1.5">
-                <label class="text-xs font-medium text-foreground">Center ID</label>
-                <input id="cfg-center-id" type="number" min="1" step="1" placeholder="1" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">Collection center identifier</p>
-              </div>
-            </div>
-          </div>
+          <!-- Save Button & Alert Feedback -->
 
 
           <!-- Save Button & Alert Feedback -->
@@ -832,8 +810,6 @@
         document.getElementById('cfg-serial-baudrate').value = String(data.serial_baudrate ?? 1200);
         document.getElementById('cfg-anpr-camera-url').value = data.anpr_camera_url ?? '';
         document.getElementById('cfg-anpr-server-url').value = data.anpr_server_url ?? '';
-        document.getElementById('cfg-device-id').value = data.device_id ?? 'pi1';
-        document.getElementById('cfg-device-key').value = data.device_key ?? '';
         document.getElementById('cfg-center-id').value = data.center_id ?? 1;
 
         const container = document.getElementById('cfg-aux-cameras-container');
@@ -886,8 +862,6 @@
         anpr_camera_url: document.getElementById('cfg-anpr-camera-url').value.trim(),
         auxiliary_camera_urls: auxUrls,
         anpr_server_url: document.getElementById('cfg-anpr-server-url').value.trim(),
-        device_id: document.getElementById('cfg-device-id').value.trim(),
-        device_key: document.getElementById('cfg-device-key').value.trim(),
         center_id: parseInt(document.getElementById('cfg-center-id').value) || 1,
       };
 
@@ -1020,7 +994,6 @@
           document.getElementById("scale-thresh-disp").textContent = `${(data.config.min_weight || 50).toFixed(1)} kg`;
           document.getElementById("ov-center-id").textContent = `Center ID: ${data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1)}`;
           document.getElementById("cloud-center-id-val").textContent = data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1);
-          document.getElementById("cloud-device-id-val").textContent = data.cloud && data.cloud.device_id !== undefined ? `Device #${data.cloud.device_id}` : "Not set";
           document.getElementById("ov-wifi-ssid").textContent = data.config.wifi_ssid || "Setup Portal";
         }
 

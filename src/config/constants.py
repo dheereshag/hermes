@@ -36,6 +36,10 @@ DEFAULT_WIFI_WATCHDOG_INTERVAL = 30.0
 # ── Gluvok Cloud API Constants ────────────────────────────────────────────────
 GLUVOK_BASE_URL = "https://gluvok.vercel.app"
 CLOUD_POST_TIMEOUT = 20.0       # Network timeout in seconds for Gluvok API entry POST
+DEFAULT_DEVICE_ID = "pi1"
+DEFAULT_DEVICE_KEY = "hardware123"
+DEFAULT_CENTER_ID = 1
+
 
 # Indian vehicle registration regex pattern (e.g. MH12AB1234, DL1CAB1234, 22BH1234AA)
 INDIAN_PLATE_REGEX = re.compile(

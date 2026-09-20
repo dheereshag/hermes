@@ -7,6 +7,9 @@ import threading
 from typing import Any
 
 from src.config.constants import (
+    DEFAULT_CENTER_ID,
+    DEFAULT_DEVICE_ID,
+    DEFAULT_DEVICE_KEY,
     DEFAULT_SERIAL_BAUDRATE,
     DEFAULT_SERIAL_PORT,
     DEFAULT_WEIGHT_THRESHOLD,
@@ -25,10 +28,11 @@ class ConfigManager:
         self.file_path = file_path
         self.wifi_ssid = ""
         self.wifi_password = ""
-        self.center_id = 1
+        self.center_id = DEFAULT_CENTER_ID
         self.weight_threshold = DEFAULT_WEIGHT_THRESHOLD
-        self.device_id: int | str = 1
-        self.device_key = ""
+        self.device_id: int | str = DEFAULT_DEVICE_ID
+        self.device_key = DEFAULT_DEVICE_KEY
+
 
         self.anpr_server_url = ""
         self.serial_port = DEFAULT_SERIAL_PORT
@@ -48,10 +52,10 @@ class ConfigManager:
                 self.save_settings(
                     ssid="",
                     password="",
-                    center_id=1,
-                    min_weight=50.0,
-                    device_id=1,
-                    device_key="",
+                    center_id=DEFAULT_CENTER_ID,
+                    min_weight=DEFAULT_WEIGHT_THRESHOLD,
+                    device_id=DEFAULT_DEVICE_ID,
+                    device_key=DEFAULT_DEVICE_KEY,
                     anpr_url="",
                 )
                 return
@@ -62,13 +66,16 @@ class ConfigManager:
 
                 self.wifi_ssid = data.get("ssid", "")
                 self.wifi_password = data.get("password", "")
-                self.center_id = int(data.get("center_id", 1))
-                raw_device_id = data.get("device_id", 1)
-                try:
-                    self.device_id = int(raw_device_id)
-                except (ValueError, TypeError):
-                    self.device_id = str(raw_device_id)
-                self.device_key = str(data.get("device_key", ""))
+                self.center_id = int(data.get("center_id", DEFAULT_CENTER_ID))
+                raw_device_id = data.get("device_id")
+                if not raw_device_id or raw_device_id == 1 or raw_device_id == "1":
+                    self.device_id = DEFAULT_DEVICE_ID
+                else:
+                    try:
+                        self.device_id = int(raw_device_id)
+                    except (ValueError, TypeError):
+                        self.device_id = str(raw_device_id)
+                self.device_key = str(data.get("device_key") or DEFAULT_DEVICE_KEY)
 
                 self.anpr_server_url = data.get("anpr_server_url", "")
                 self.serial_port = data.get("serial_port", "/dev/ttyAMA0")
@@ -126,10 +133,10 @@ class ConfigManager:
         self,
         ssid: str,
         password: str,
-        center_id: int,
-        min_weight: float,
-        device_id: int | str = 1,
-        device_key: str = "",
+        center_id: int = DEFAULT_CENTER_ID,
+        min_weight: float = DEFAULT_WEIGHT_THRESHOLD,
+        device_id: int | str = DEFAULT_DEVICE_ID,
+        device_key: str = DEFAULT_DEVICE_KEY,
         anpr_url: str | None = None,
     ) -> None:
         with self._lock:
@@ -155,8 +162,6 @@ class ConfigManager:
         anpr_camera_url: str | None = None,
         auxiliary_camera_urls: list[str] | None = None,
         anpr_server_url: str | None = None,
-        device_id: int | str | None = None,
-        device_key: str | None = None,
         center_id: int | None = None,
     ) -> None:
         """Update system configuration fields and persist to config.json."""
@@ -173,17 +178,11 @@ class ConfigManager:
                 self.auxiliary_camera_urls = [str(u).strip() for u in auxiliary_camera_urls if str(u).strip()]
             if anpr_server_url is not None:
                 self.anpr_server_url = str(anpr_server_url).strip()
-            if device_id is not None:
-                try:
-                    self.device_id = int(device_id)
-                except (ValueError, TypeError):
-                    self.device_id = str(device_id)
-            if device_key is not None:
-                self.device_key = str(device_key).strip()
             if center_id is not None:
                 self.center_id = int(center_id)
             self._persist()
             logger.info("[Config] System configuration updated via web interface.")
+
 
     def update_device_credentials(
         self,

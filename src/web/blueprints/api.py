@@ -117,7 +117,6 @@ def status():
         },
         "cloud": {
             "center_id": config.center_id,
-            "device_id": config.device_id,
             "configured": bool(config.device_id and config.device_key),
         },
         "cameras": {
@@ -130,7 +129,7 @@ def status():
         },
         "config": {
             "wifi_ssid": config.wifi_ssid,
-            "device_id": config.device_id,
+            "center_id": config.center_id,
             "min_weight": config.weight_threshold,
             "serial_port": config.serial_port,
             "serial_baudrate": config.serial_baudrate,
@@ -156,8 +155,6 @@ def get_config():
         "anpr_camera_url": config.anpr_camera_url,
         "auxiliary_camera_urls": config.auxiliary_camera_urls,
         "anpr_server_url": config.anpr_server_url,
-        "device_id": config.device_id,
-        "device_key": config.device_key,
         "center_id": config.center_id,
     }), 200
 
@@ -181,10 +178,9 @@ def post_config():
         anpr_camera_url=data.get("anpr_camera_url"),
         auxiliary_camera_urls=data.get("auxiliary_camera_urls"),
         anpr_server_url=data.get("anpr_server_url"),
-        device_id=data.get("device_id"),
-        device_key=data.get("device_key"),
         center_id=data.get("center_id"),
     )
+
 
 
     _apply_uart_config_changes(

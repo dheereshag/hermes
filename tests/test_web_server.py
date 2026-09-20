@@ -50,8 +50,9 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("scale", data)
         self.assertIn("argus", data)
         self.assertIn("cloud", data)
-        self.assertIn("device_id", data["cloud"])
         self.assertIn("configured", data["cloud"])
+        self.assertNotIn("device_id", data["cloud"])
+        self.assertNotIn("device_key", data["cloud"])
         self.assertIn("spool", data)
         self.assertIn("events", data)
 
@@ -92,6 +93,14 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.wifi_ssid, "")
         self.assertEqual(config.wifi_password, "")
 
+    def test_get_api_config_excludes_credentials(self):
+        res = self.client.get("/api/config")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertNotIn("device_id", data)
+        self.assertNotIn("device_key", data)
+        self.assertIn("center_id", data)
+
     def test_post_api_config_success(self):
         payload = {
             "min_weight": 65.0,
@@ -100,8 +109,6 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             "anpr_camera_url": "http://192.168.1.150/snapshot",
             "auxiliary_camera_urls": ["http://192.168.1.151/snapshot"],
             "anpr_server_url": "http://127.0.0.1:8000/recognize",
-            "device_id": "pi1",
-            "device_key": "hardware123",
             "center_id": 5,
         }
         res = self.client.post(
