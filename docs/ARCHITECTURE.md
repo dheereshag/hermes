@@ -149,7 +149,7 @@ Because Python 3.14 on a multi-core Pi 5 supports free-threaded CPython (PEP 703
 | **`WiFiWatchdog`** | Dedicated Daemon Thread | Every 30.0s | Runs `nmcli` network checks and controls emergency AP fallback independently. |
 | **`ANPRLoop_<id>`** | Ephemeral Session Thread | Every 2.0s during weighing | Fetches Cam 1 frame and queries Argus microservice asynchronously. |
 | **`AuxCapture_<id>`** | Ephemeral Session Worker | Triggered upon 10s stability | Fetches overview angles (Cams 2..N) via `ThreadPoolExecutor(4)` without stalling serial reads. |
-| **`CloudUpload_<id>`** | Ephemeral Upload Worker | Triggered upon session finalization | Transmits multi-MB payload with 20s timeout to Gluvok API without blocking the scale thread. |
+| **`SpoolWorker`** | Dedicated Daemon Thread | Event-driven + 5.0s poll | Sequentially leases records from SQLite WAL queue and uploads to Gluvok API via multipart POST; completely non-blocking to scale UART. |
 
 ### 4.2 Python 3.14 Free-Threading & Synchronization Invariants
 
@@ -158,4 +158,44 @@ Under Python 3.14, threads execute with true hardware parallelism across all 4 C
 - **`ScaleUARTReader`**: Line buffer bytearray and inter-character timeout tracking are synchronized via `threading.Lock()`.
 - **`WeighbridgeSessionManager`**: Phase transitions, frame buffers, and candidate plate lists are guarded by `threading.Lock()`.
 - **`telemetry.py`**: Telemetry circular buffer and live error statistics are guarded by `_events_lock` and `_live_lock`.
+- **`db.py`**: SQLite database operations, schema creation, and atomic lease acquisitions are synchronized with `_db_lock`.
+
+---
+
+## 5. Local Durable Outbox Storage & Anti-Duplication Architecture
+
+To guarantee zero data loss during power loss or offline network drops, Hermes employs a **Write-Ahead Local Outbox Spool**:
+
+```
+WEIGHMENT FINALIZED
+        │
+        ▼
+SQLite WAL Database (data/hermes.db)
+- weighment_spool: status='PENDING', lease_until=0, session_id (UNIQUE)
+- spool_images: raw binary BLOBs (cam1 + auxiliary)
+        │
+        ▼
+Single SpoolWorker (FIFO Sequential Processing)
+        │
+        ├── 1. Acquire Atomic Lease Lock (status='UPLOADING', lease_until=now+60s)
+        │      (Prevents concurrent worker threads or timer ticks from double-sending)
+        │
+        ├── 2. Execute Multipart POST (-u "pi1:hardware123")
+        │      - Fields: center_id, detected_vehicle_number, weight
+        │      - Files: file=@truck_001.jpg;type=image/jpeg
+        │      │
+        │      ├── HTTP 200/201 (Success) ──► ACKNOWLEDGED (cloud_entry_id recorded)
+        │      │
+        │      ├── Connect Failure (Socket / DNS / Wi-Fi drop)
+        │      │   └── Safe RETRY: Data never left the device, 0% chance cloud received it.
+        │      │
+        │      └── Read Timeout / Mid-Stream Drop (Ambiguous: Did cloud commit before drop?)
+        │          └── VERIFY-BEFORE-RETRY Protocol:
+        │              1. Query Cloud GET /api/entries?center_id=X&detected_vehicle_number=Y
+        │              2. If entry with matching plate and weight within past 5m exists:
+        │                 Mark as ACKNOWLEDGED (Avoid duplicate upload!)
+        │              3. If confirmed not present:
+        │                 Schedule RETRY with exponential backoff (5s, 10s, 20s... max 300s + jitter).
+```
+
 

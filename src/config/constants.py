@@ -41,3 +41,11 @@ CLOUD_POST_TIMEOUT = 20.0       # Network timeout in seconds for Gluvok API entr
 INDIAN_PLATE_REGEX = re.compile(
     r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"
 )
+
+# ── SQLite Outbox Spool Constants ─────────────────────────────────────────────
+DEFAULT_DB_PATH = "data/hermes.db"
+SPOOL_LEASE_DURATION_S = 60.0    # Atomic upload lease duration (60s)
+SPOOL_WORKER_POLL_INTERVAL = 5.0 # Seconds between outbox sweeps
+SPOOL_BASE_RETRY_DELAY = 5.0     # Initial retry backoff in seconds
+SPOOL_MAX_RETRY_DELAY = 300.0    # Maximum retry backoff in seconds (5 min)
+

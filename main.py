@@ -27,7 +27,13 @@ logger = logging.getLogger(__name__)
 
 # ── Import decoupled layer modules ───────────────────────────────────────────
 from src.config import config
-from src.core import scale_state_machine, session_manager
+from src.core import (
+    init_db,
+    recover_stranded_leases,
+    scale_state_machine,
+    session_manager,
+    spool_worker,
+)
 from src.devices import get_uart_reader, start_wifi_watchdog, stop_wifi_watchdog
 from src.web import start_web_server, stop_web_server
 
@@ -35,11 +41,13 @@ from src.web import start_web_server, stop_web_server
 # ── Graceful shutdown ─────────────────────────────────────────────────────────
 def shutdown(signum, frame):
     logger.info("\n[Main] Shutdown signal received. Cleaning up...")
+    spool_worker.stop()
     get_uart_reader().stop()
     stop_web_server()
     stop_wifi_watchdog()
     session_manager.reset_session()
     sys.exit(0)
+
 
 
 signal.signal(signal.SIGINT,  shutdown)
@@ -62,6 +70,11 @@ def setup():
 
     # Start automatic Wi-Fi watchdog & emergency hotspot monitor
     start_wifi_watchdog(interval=30.0)
+
+    # Initialize SQLite durable outbox spool and start dispatcher
+    init_db()
+    recover_stranded_leases()
+    spool_worker.start()
 
 
     # Log active settings from config.json

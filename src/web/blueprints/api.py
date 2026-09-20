@@ -8,6 +8,7 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from src.config.config_manager import config
+from src.core import get_spool_stats
 from src.core.telemetry import (
     get_error_counts,
     get_latest_weighment,
@@ -138,9 +139,11 @@ def status():
             "anpr_server_url": config.anpr_server_url,
         },
         "latest_weighment": get_latest_weighment(),
+        "spool": get_spool_stats(),
         "error_counts": get_error_counts(),
         "events": get_system_events(),
     }), 200
+
 
 
 @api_bp.route("/config", methods=["GET"])

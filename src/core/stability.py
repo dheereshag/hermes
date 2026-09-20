@@ -9,7 +9,6 @@ One transmission per session; resets only when weight returns to zero.
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from enum import Enum
 from typing import Any
@@ -108,21 +107,16 @@ class ScaleStabilityMachine:
 
         self._evaluate_stability_window(parsed_weight, now)
 
-    def _trigger_upload(self, session_package: dict[str, Any]) -> threading.Thread:
-        from src.integrations.gluvok import post_to_cloud
+    def _trigger_upload(self, session_package: dict[str, Any]) -> str:
+        from src.core.db import spool_weighment
+        from src.core.spool import spool_worker
 
-        session_id = str(session_package.get("session_id", "unknown"))
-        upload_thread = threading.Thread(
-            target=post_to_cloud,
-            args=(session_package,),
-            name=f"CloudUpload_{session_id}",
-            daemon=True,
-        )
-        upload_thread.start()
+        session_id = spool_weighment(session_package)
+        spool_worker.notify_new_record()
         logger.info(
-            f"[Scale Session] Dispatched cloud upload for session {session_id} in background thread."
+            f"[Scale Session] Spooled session {session_id} to durable local SQLite queue."
         )
-        return upload_thread
+        return session_id
 
     def reset(self):
         """Manually reset the state machine."""

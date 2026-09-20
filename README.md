@@ -32,7 +32,8 @@ hermes/
 │   ├── [test_anpr_client.py](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py)    # ANPR client, response schemas, and plate voting tests
 │   ├── [test_scale_uart.py](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py)     # Scale UART parser, framing, and silence flush tests
 │   ├── [test_session_fallback.py](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) # Weighbridge session error propagation tests
-│   ├── [test_cloud_post.py](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py)     # Gluvok API device header auth and payload tests
+│   ├── [test_cloud_post.py](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py)     # Gluvok API multipart and Basic Auth tests
+│   ├── [test_spool_db.py](file:///Users/d/Downloads/hermes/tests/test_spool_db.py)       # SQLite WAL durable spool, atomic leasing & idempotency tests
 │   ├── [test_threading_isolation.py](file:///Users/d/Downloads/hermes/tests/test_threading_isolation.py) # Threading concurrency and non-blocking isolation tests
 │   ├── [test_web_server.py](file:///Users/d/Downloads/hermes/tests/test_web_server.py)     # Diagnostics web console & REST API tests
 │   └── [test_wifi_manager.py](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py)   # Wi-Fi watchdog & emergency hotspot fallback tests
@@ -43,7 +44,9 @@ hermes/
     │   └── [constants.py](file:///Users/d/Downloads/hermes/src/config/constants.py)       # System timing, timeout constants, buffer sizes & regexes
     ├── core/
     │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/core/__init__.py)           # Subpackage exports
+    │   ├── [db.py](file:///Users/d/Downloads/hermes/src/core/db.py)                       # SQLite WAL durable outbox store with atomic lease locking
     │   ├── [session.py](file:///Users/d/Downloads/hermes/src/core/session.py)             # Weighbridge session lifecycle & multi-camera coordinator
+    │   ├── [spool.py](file:///Users/d/Downloads/hermes/src/core/spool.py)                 # Background outbox dispatcher & retry worker with verify-before-retry
     │   ├── [stability.py](file:///Users/d/Downloads/hermes/src/core/stability.py)         # 10s continuous weight stability state machine
     │   └── [telemetry.py](file:///Users/d/Downloads/hermes/src/core/telemetry.py)         # Decoupled thread-safe telemetry and event log buffer
     ├── devices/
@@ -54,7 +57,7 @@ hermes/
     ├── integrations/
     │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/integrations/__init__.py)   # Subpackage exports
     │   ├── [anpr.py](file:///Users/d/Downloads/hermes/src/integrations/anpr.py)           # Argus ANPR server client & plate voting algorithm
-    │   └── [gluvok.py](file:///Users/d/Downloads/hermes/src/integrations/gluvok.py)       # Gluvok Cloud API client, device headers & payload poster
+    │   └── [gluvok.py](file:///Users/d/Downloads/hermes/src/integrations/gluvok.py)       # Gluvok Cloud API client (Basic Auth, multipart upload, verification)
     └── web/
         ├── [__init__.py](file:///Users/d/Downloads/hermes/src/web/__init__.py)            # Subpackage exports
         ├── [app.py](file:///Users/d/Downloads/hermes/src/web/app.py)                     # Flask application factory (`create_app`)
@@ -74,24 +77,27 @@ hermes/
 
 | Subsystem | Primary Responsibilities | Key Components |
 | :--- | :--- | :--- |
-| **Core Business Logic** (`src/core/`) | Orchestrates weighbridge session lifecycles, 10s continuous weight stability state machine (±2 kg), and thread-safe telemetry store. | [`session.py`](file:///Users/d/Downloads/hermes/src/core/session.py), [`stability.py`](file:///Users/d/Downloads/hermes/src/core/stability.py), [`telemetry.py`](file:///Users/d/Downloads/hermes/src/core/telemetry.py) |
+| **Core Business Logic & Durable Spool** (`src/core/`) | Orchestrates weighbridge sessions, 10s continuous weight stability (±2 kg), WAL SQLite outbox storage, background FIFO retry dispatcher, and telemetry store. | [`db.py`](file:///Users/d/Downloads/hermes/src/core/db.py), [`spool.py`](file:///Users/d/Downloads/hermes/src/core/spool.py), [`session.py`](file:///Users/d/Downloads/hermes/src/core/session.py), [`stability.py`](file:///Users/d/Downloads/hermes/src/core/stability.py), [`telemetry.py`](file:///Users/d/Downloads/hermes/src/core/telemetry.py) |
 | **Physical Hardware Devices** (`src/devices/`) | Direct drivers: reads RS-232 serial stream at 1200 baud, HTTP/RTSP camera snapshot grabbers, and Linux NetworkManager (`nmcli`) Wi-Fi watchdog. | [`scale.py`](file:///Users/d/Downloads/hermes/src/devices/scale.py), [`camera.py`](file:///Users/d/Downloads/hermes/src/devices/camera.py), [`wifi.py`](file:///Users/d/Downloads/hermes/src/devices/wifi.py) |
-| **External Integrations** (`src/integrations/`) | Integrates external networks: Argus ANPR FastAPI microservice client with consensus voting, and Gluvok Cloud API with stateless device headers & direct Base64 upload. | [`anpr.py`](file:///Users/d/Downloads/hermes/src/integrations/anpr.py), [`gluvok.py`](file:///Users/d/Downloads/hermes/src/integrations/gluvok.py) |
-| **Diagnostics Web Console** (`src/web/`) | Modular Flask application factory on port `8080` with Tailwind CSS v4 single-page dashboard for live telemetry, system logs, and authenticated configuration. | [`create_app`](file:///Users/d/Downloads/hermes/src/web/app.py), [`FallbackWebServer`](file:///Users/d/Downloads/hermes/src/web/server.py), [`index.html`](file:///Users/d/Downloads/hermes/src/web/templates/index.html) |
+| **External Integrations** (`src/integrations/`) | Integrates external networks: Argus ANPR microservice with consensus voting, and Gluvok Cloud API with Basic Auth (`-u`), multipart form uploads, and anti-duplicate verification. | [`anpr.py`](file:///Users/d/Downloads/hermes/src/integrations/anpr.py), [`gluvok.py`](file:///Users/d/Downloads/hermes/src/integrations/gluvok.py) |
+| **Diagnostics Web Console** (`src/web/`) | Modular Flask application factory on port `8080` with Tailwind CSS v4 single-page dashboard for live telemetry, spool queue state, system logs, and authenticated configuration. | [`create_app`](file:///Users/d/Downloads/hermes/src/web/app.py), [`FallbackWebServer`](file:///Users/d/Downloads/hermes/src/web/server.py), [`index.html`](file:///Users/d/Downloads/hermes/src/web/templates/index.html) |
 | **System Configuration** (`src/config/`) | Thread-safe JSON-backed configuration manager (`RLock`), centralized timing/timeout constants, and fallback defaults. | [`config_manager.py`](file:///Users/d/Downloads/hermes/src/config/config_manager.py), [`constants.py`](file:///Users/d/Downloads/hermes/src/config/constants.py) |
 
 ---
 
 ## 🌟 Key Features
 
+- **Write-Ahead SQLite Local Durability**: Weighments and camera frames are committed to a local SQLite database (`data/hermes.db`) in WAL mode *before* any upload is attempted, guaranteeing zero data loss during power outages or extended network downtime.
+- **Edge Anti-Duplication & Idempotency**: Sequential single-flight FIFO dispatcher with atomic task leases (`lease_until`) and a **verify-before-retry** protocol for ambiguous read timeouts, preventing duplicate cloud entries when retrying offline weighments.
 - **Weight Scale Serial Parsing**: Reads continuous raw serial stream from UART (`/dev/ttyAMA0` or USB-to-Serial at 1200 Baud 8N1).
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
 - **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
-- **Non-Blocking Real-Time Threading (Python 3.14 & Pi 5)**: Real-time scale serial reading is completely decoupled from slow network I/O; cloud uploads (20s timeout) and auxiliary camera snapshots are dispatched asynchronously in dedicated background workers, with full thread-safety locking across all shared state.
-- **Gluvok Cloud API Integration**: Authenticates statelessly with Gluvok edge device headers (`x-device-id`, `x-device-key`) and posts complete weighment records with direct base64 images.
-- **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` (with blueprints for REST APIs and views) for live telemetry, error monitoring, and runtime configuration.
+- **Non-Blocking Real-Time Threading**: Scale serial reading is completely decoupled from disk spooling and network I/O; cloud uploads and camera captures are dispatched in dedicated background threads.
+- **Gluvok Cloud API Multipart Integration**: Matches curl specification (`curl -X POST ... -u "pi1:hardware123" -F "center_id=..." -F "detected_vehicle_number=..." -F "weight=..." -F "file=@..."`).
+- **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` displaying live scale weight, ANPR status, cloud spool queue counts, error monitoring, and configuration.
 - **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
+
 
 ---
 

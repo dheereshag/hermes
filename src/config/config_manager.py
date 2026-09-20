@@ -27,8 +27,9 @@ class ConfigManager:
         self.wifi_password = ""
         self.center_id = 1
         self.weight_threshold = DEFAULT_WEIGHT_THRESHOLD
-        self.device_id = 1
+        self.device_id: int | str = 1
         self.device_key = ""
+
         self.anpr_server_url = ""
         self.serial_port = DEFAULT_SERIAL_PORT
         self.serial_baudrate = DEFAULT_SERIAL_BAUDRATE
@@ -62,9 +63,13 @@ class ConfigManager:
                 self.wifi_ssid = data.get("ssid", "")
                 self.wifi_password = data.get("password", "")
                 self.center_id = int(data.get("center_id", 1))
-                self.weight_threshold = float(data.get("min_weight", 50.0))
-                self.device_id = int(data.get("device_id", 1))
+                raw_device_id = data.get("device_id", 1)
+                try:
+                    self.device_id = int(raw_device_id)
+                except (ValueError, TypeError):
+                    self.device_id = str(raw_device_id)
                 self.device_key = str(data.get("device_key", ""))
+
                 self.anpr_server_url = data.get("anpr_server_url", "")
                 self.serial_port = data.get("serial_port", "/dev/ttyAMA0")
                 self.serial_baudrate = int(data.get("serial_baudrate", 1200))
@@ -123,7 +128,7 @@ class ConfigManager:
         password: str,
         center_id: int,
         min_weight: float,
-        device_id: int = 1,
+        device_id: int | str = 1,
         device_key: str = "",
         anpr_url: str | None = None,
     ) -> None:
@@ -132,8 +137,12 @@ class ConfigManager:
             self.wifi_password = password
             self.center_id = int(center_id)
             self.weight_threshold = float(min_weight)
-            self.device_id = int(device_id)
+            try:
+                self.device_id = int(device_id)
+            except (ValueError, TypeError):
+                self.device_id = str(device_id)
             self.device_key = str(device_key)
+
             if anpr_url is not None:
                 self.anpr_server_url = anpr_url
             self._persist()

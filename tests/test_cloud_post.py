@@ -8,7 +8,6 @@ import requests
 from src.config.config_manager import config
 from src.core.telemetry import get_error_counts, get_system_events, reset_state
 from src.integrations.gluvok import (
-    _build_entry_payload,
     get_device_headers,
     post_to_cloud,
 )
@@ -35,24 +34,8 @@ class TestCloudPost(unittest.TestCase):
         self.assertEqual(headers["x-device-id"], "42")
         self.assertEqual(headers["x-device-key"], "hardware123")
 
-    def test_build_entry_payload_structure(self):
-        session = {
-            "weight": 14250.5,
-            "anpr_plate": "MH12AB1234",
-            "cam1_final_image": b"fake_cam1_bytes",
-            "auxiliary_images": {1: b"fake_aux1_bytes", 2: b"fake_aux2_bytes"},
-        }
-        payload = _build_entry_payload(session)
-
-        self.assertEqual(payload["detected_vehicle_number"], "MH12AB1234")
-        self.assertEqual(payload["weight"], 14250.5)
-        self.assertEqual(payload["center_id"], 1)
-        self.assertEqual(len(payload["images"]), 3)
-        self.assertTrue(payload["images"][0].startswith("data:image/jpeg;base64,"))
-        self.assertNotIn("status", payload)
-
     @patch("src.integrations.gluvok.requests.post")
-    def test_post_to_cloud_success_201(self, mock_post: Mock):
+    def test_post_to_cloud_success_201_preserves_payload(self, mock_post: Mock):
         mock_resp = Mock(status_code=201, content=b'{"data": {"id": 99}}')
         mock_resp.json.return_value = {"data": {"id": 99}}
         mock_post.return_value = mock_resp
@@ -67,16 +50,24 @@ class TestCloudPost(unittest.TestCase):
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
-        self.assertIn("headers", call_kwargs)
-        headers = call_kwargs["headers"]
-        self.assertEqual(headers["x-device-id"], "42")
-        self.assertEqual(headers["x-device-key"], "hardware123")
-        self.assertEqual(headers["Content-Type"], "application/json")
 
-        payload = call_kwargs["json"]
-        self.assertEqual(payload["detected_vehicle_number"], "DL1CAB1234")
-        self.assertEqual(payload["weight"], 35200.0)
-        self.assertEqual(len(session), 0)
+        # 1. Verify Basic Auth (-u "42:hardware123")
+        self.assertEqual(call_kwargs["auth"], ("42", "hardware123"))
+
+        # 2. Verify form data
+        data = call_kwargs["data"]
+        self.assertEqual(data["detected_vehicle_number"], "DL1CAB1234")
+        self.assertEqual(data["weight"], "35200.0")
+        self.assertEqual(data["center_id"], "1")
+
+        # 3. Verify multipart file attachment
+        files = call_kwargs["files"]
+        self.assertIsNotNone(files)
+        self.assertEqual(files[0][0], "file")
+        self.assertEqual(files[0][1][1], b"truck_img")
+
+        # 4. Verify session payload is NOT cleared
+        self.assertGreater(len(session), 0)
 
         events = get_system_events()
         self.assertTrue(any("Entry #99 created" in ev["message"] for ev in events))

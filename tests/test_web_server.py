@@ -52,7 +52,9 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("cloud", data)
         self.assertIn("device_id", data["cloud"])
         self.assertIn("configured", data["cloud"])
+        self.assertIn("spool", data)
         self.assertIn("events", data)
+
 
     def test_post_api_wifi_success(self):
         payload = {"ssid": "TestRouter_5G", "password": "SecretPassword123"}
