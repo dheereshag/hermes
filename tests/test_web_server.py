@@ -100,6 +100,9 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             "anpr_camera_url": "http://192.168.1.150/snapshot",
             "auxiliary_camera_urls": ["http://192.168.1.151/snapshot"],
             "anpr_server_url": "http://127.0.0.1:8000/recognize",
+            "device_id": "pi1",
+            "device_key": "hardware123",
+            "center_id": 5,
         }
         res = self.client.post(
             "/api/config",
@@ -111,6 +114,10 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.weight_threshold, 65.0)
         self.assertEqual(config.serial_port, "/dev/ttyUSB0")
         self.assertEqual(config.serial_baudrate, 9600)
+        self.assertEqual(config.device_id, "pi1")
+        self.assertEqual(config.device_key, "hardware123")
+        self.assertEqual(config.center_id, 5)
+
 
     def test_post_api_config_unauthorized(self):
         res = self.client.post(

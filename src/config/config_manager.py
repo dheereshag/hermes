@@ -155,6 +155,9 @@ class ConfigManager:
         anpr_camera_url: str | None = None,
         auxiliary_camera_urls: list[str] | None = None,
         anpr_server_url: str | None = None,
+        device_id: int | str | None = None,
+        device_key: str | None = None,
+        center_id: int | None = None,
     ) -> None:
         """Update system configuration fields and persist to config.json."""
         with self._lock:
@@ -170,15 +173,35 @@ class ConfigManager:
                 self.auxiliary_camera_urls = [str(u).strip() for u in auxiliary_camera_urls if str(u).strip()]
             if anpr_server_url is not None:
                 self.anpr_server_url = str(anpr_server_url).strip()
+            if device_id is not None:
+                try:
+                    self.device_id = int(device_id)
+                except (ValueError, TypeError):
+                    self.device_id = str(device_id)
+            if device_key is not None:
+                self.device_key = str(device_key).strip()
+            if center_id is not None:
+                self.center_id = int(center_id)
             self._persist()
             logger.info("[Config] System configuration updated via web interface.")
 
-    def update_device_credentials(self, device_id: int, device_key: str) -> None:
+    def update_device_credentials(
+        self,
+        device_id: int | str,
+        device_key: str,
+        center_id: int | None = None,
+    ) -> None:
         with self._lock:
-            self.device_id = int(device_id)
-            self.device_key = str(device_key)
+            try:
+                self.device_id = int(device_id)
+            except (ValueError, TypeError):
+                self.device_id = str(device_id)
+            self.device_key = str(device_key).strip()
+            if center_id is not None:
+                self.center_id = int(center_id)
             self._persist()
             logger.info(f"[Config] Device credentials updated for Device ID: {self.device_id}.")
+
 
     def update_wifi_credentials(self, ssid: str, password: str) -> None:
         with self._lock:
