@@ -93,24 +93,24 @@ class SpoolWorker:
         weight = float(task["weight"])
 
 
-        # Fetch primary image from DB
+        # Fetch all camera images for this session from DB
         images = get_spool_images(session_id)
-        cam1_bytes: bytes | None = None
-        for cam_name, _, data in images:
-            if cam_name == "cam1":
-                cam1_bytes = data
-                break
-        if not cam1_bytes and images:
-            cam1_bytes = images[0][2]
+        image_attachments = [
+            (filename, data)
+            for _, filename, data in images
+            if data and isinstance(data, bytes) and len(data) > 0
+        ]
 
-        logger.info(f"[SpoolWorker] Dispatching leased session {session_id} to cloud...")
+        logger.info(
+            f"[SpoolWorker] Dispatching leased session {session_id} to cloud with "
+            f"{len(image_attachments)} camera image(s)..."
+        )
 
         success, entry_id, error_msg, is_read_timeout = transmit_entry_multipart(
             center_id=center_id,
             detected_vehicle_number=vehicle_num,
             weight=weight,
-            image_bytes=cam1_bytes,
-            filename=f"{session_id}_truck.jpg",
+            images=image_attachments,
         )
 
         if success:

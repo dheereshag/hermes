@@ -156,16 +156,18 @@ def spool_weighment(session_package: dict[str, Any]) -> str:
             # Store any auxiliary camera snapshots
             aux_dict = session_package.get("auxiliary_images", {})
             if isinstance(aux_dict, dict):
-                for cam_idx in sorted(aux_dict.keys()):
+                for cam_idx in sorted(aux_dict.keys(), key=lambda k: str(k)):
                     img_bytes = aux_dict[cam_idx]
                     if img_bytes and isinstance(img_bytes, bytes):
+                        str_idx = str(cam_idx)
+                        cam_name = str_idx if str_idx.startswith(("anpr_", "aux_")) else f"aux_{str_idx}"
                         conn.execute(
                             """
                             INSERT INTO spool_images (
                                 session_id, camera_name, filename, image_data, content_type
                             ) VALUES (?, ?, ?, ?, 'image/jpeg');
                             """,
-                            (session_id, f"aux_{cam_idx}", f"{session_id}_aux_{cam_idx}.jpg", img_bytes),
+                            (session_id, cam_name, f"{session_id}_{cam_name}.jpg", img_bytes),
                         )
             conn.commit()
             logger.info(

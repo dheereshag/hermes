@@ -66,8 +66,9 @@ def transmit_entry_multipart(
     center_id: int,
     detected_vehicle_number: str,
     weight: float,
-    image_bytes: bytes | None,
+    image_bytes: bytes | None = None,
     filename: str = "truck_001.jpg",
+    images: list[tuple[str, bytes]] | None = None,
 ) -> tuple[bool, str | None, str | None, bool]:
     """
     Submits vehicle weighment session to Gluvok API (/api/entries) matching the curl specification:
@@ -76,7 +77,10 @@ def transmit_entry_multipart(
         -F "center_id=1" \\
         -F "detected_vehicle_number=MH12AB1234" \\
         -F "weight=18540.5" \\
-        -F "file=@/home/pi/captures/truck_001.jpg;type=image/jpeg"
+        -F "file=@/home/pi/captures/truck_cam1.jpg;type=image/jpeg" \\
+        -F "file=@/home/pi/captures/truck_aux_2.jpg;type=image/jpeg" ...
+
+    Supports transmitting all connected camera images (ANPR + Auxiliary overview cameras).
 
     Returns:
         (success: bool, entry_id: str | None, error_message: str | None, is_read_timeout: bool)
@@ -98,16 +102,28 @@ def transmit_entry_multipart(
         "weight": str(round(weight, 3)),
     }
 
+    # Collect valid images from images list or single image_bytes
+    valid_images: list[tuple[str, bytes]] = []
+    if images:
+        for fname, b in images:
+            if b and isinstance(b, bytes) and len(b) > 0:
+                valid_images.append((fname, b))
+
+    if not valid_images and image_bytes and isinstance(image_bytes, bytes) and len(image_bytes) > 0:
+        valid_images.append((filename, image_bytes))
+
     # In curl -F, multipart/form-data is always used. In requests, passing files
     # forces multipart/form-data encoding with boundary even if image is not present.
-    has_image = bool(image_bytes and isinstance(image_bytes, bytes) and len(image_bytes) > 0)
-    files: list[tuple[str, tuple[str, bytes, str]]] = [
-        ("file", (filename, image_bytes if has_image else b"", "image/jpeg")),
-    ]
+    if valid_images:
+        files: list[tuple[str, tuple[str, bytes, str]]] = [
+            ("file", (fn, b, "image/jpeg")) for fn, b in valid_images
+        ]
+    else:
+        files = [("file", (filename, b"", "image/jpeg"))]
 
     logger.info(
         f"[Gluvok API] Transmitting multipart entry to {entries_url}: "
-        f"Vehicle='{safe_plate}', Weight={weight:.3f} kg, Center ID={center_id}"
+        f"Vehicle='{safe_plate}', Weight={weight:.3f} kg, Center ID={center_id}, Images={len(valid_images)}"
     )
 
     try:
@@ -121,7 +137,7 @@ def transmit_entry_multipart(
 
         # If remote cloud storage bucket upload failed (e.g. Supabase bucket misconfiguration),
         # retry with empty file payload so the weighment record is safely saved to the cloud DB.
-        if response.status_code == 400 and has_image and "storage" in response.text.lower():
+        if response.status_code == 400 and valid_images and "storage" in response.text.lower():
             logger.warning(
                 "[Gluvok API] Cloud storage bucket failed on remote server. "
                 "Retrying without image payload to guarantee weighment entry is saved..."
@@ -235,15 +251,28 @@ def post_to_cloud(session_payload: dict[str, Any]) -> None:
     raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
     detected_plate, _ = sanitize_vehicle_number(raw_plate)
     weight = float(session_payload.get("weight", 0.0))
-    image_bytes = session_payload.get("cam1_final_image")
-    if not image_bytes and "images" in session_payload:
-        image_bytes = session_payload["images"][0] if session_payload["images"] else None
+
+    images_to_send: list[tuple[str, bytes]] = []
+    cam1_bytes = session_payload.get("cam1_final_image")
+    if cam1_bytes and isinstance(cam1_bytes, bytes):
+        images_to_send.append(("truck_cam1.jpg", cam1_bytes))
+
+    aux_dict = session_payload.get("auxiliary_images", {})
+    if isinstance(aux_dict, dict):
+        for idx, b in aux_dict.items():
+            if b and isinstance(b, bytes):
+                images_to_send.append((f"truck_aux_{idx}.jpg", b))
+
+    if not images_to_send and "images" in session_payload:
+        for idx, b in enumerate(session_payload["images"]):
+            if b and isinstance(b, bytes):
+                images_to_send.append((f"truck_{idx+1}.jpg", b))
 
     transmit_entry_multipart(
         center_id=center_id,
         detected_vehicle_number=detected_plate,
         weight=weight,
-        image_bytes=image_bytes,
+        images=images_to_send,
     )
 
 

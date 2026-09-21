@@ -226,6 +226,39 @@ class TestSpoolDB(unittest.TestCase):
         )
         self.assertEqual(verified_id, "420")
 
+    @patch("src.integrations.gluvok.requests.post")
+    def test_transmit_entry_multipart_multiple_cameras(self, mock_post: Mock):
+        mock_resp = Mock(status_code=201, content=b'{"data": {"id": 107}}')
+        mock_resp.json.return_value = {"data": {"id": 107}}
+        mock_post.return_value = mock_resp
+
+        multi_images = [
+            ("truck_cam1.jpg", b"cam1_bytes"),
+            ("truck_aux_2.jpg", b"aux2_bytes"),
+            ("truck_aux_3.jpg", b"aux3_bytes"),
+            ("truck_anpr_2.jpg", b"anpr2_bytes"),
+        ]
+
+        success, entry_id, _err, is_timeout = transmit_entry_multipart(
+            center_id=1,
+            detected_vehicle_number="MH12AB1234",
+            weight=18540.5,
+            images=multi_images,
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(entry_id, "107")
+        self.assertFalse(is_timeout)
+
+        call_kwargs = mock_post.call_args.kwargs
+        files = call_kwargs["files"]
+        self.assertEqual(len(files), 4)
+        for i, (expected_fn, expected_bytes) in enumerate(multi_images):
+            self.assertEqual(files[i][0], "file")
+            self.assertEqual(files[i][1][0], expected_fn)
+            self.assertEqual(files[i][1][1], expected_bytes)
+            self.assertEqual(files[i][1][2], "image/jpeg")
+
     def test_spool_worker_end_to_end(self):
         worker = SpoolWorker(poll_interval=0.1)
 
@@ -234,14 +267,22 @@ class TestSpoolDB(unittest.TestCase):
             "weight": 32000.0,
             "anpr_plate": "MH14XY9999",
             "cam1_final_image": b"truck_photo",
+            "auxiliary_images": {2: b"aux2_photo", "anpr_2": b"anpr2_photo"},
         }
         spool_weighment(pkg)
 
-        with patch("src.integrations.gluvok.transmit_entry_multipart", return_value=(True, "CLOUD_100", None, False)):
+        with patch("src.integrations.gluvok.transmit_entry_multipart", return_value=(True, "CLOUD_100", None, False)) as mock_tx:
             worker.start()
             worker.notify_new_record()
             time.sleep(0.3)
             worker.stop()
+
+            # Verify that transmit_entry_multipart was called with all images
+            mock_tx.assert_called_once()
+            called_images = mock_tx.call_args.kwargs.get("images")
+            self.assertIsNotNone(called_images)
+            assert isinstance(called_images, list)
+            self.assertEqual(len(called_images), 3)  # cam1 + aux_2 + anpr_2
 
         stats = get_spool_stats()
         self.assertEqual(stats["acknowledged"], 1)

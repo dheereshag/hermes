@@ -230,12 +230,14 @@ class WeighbridgeSessionManager:
                 final_anpr_plate = "NO_PLATE_DETECTED"
 
             last_cam1_image = self._cam1_frames[-1] if self._cam1_frames else None
-            aux_copy = dict(self._auxiliary_images)
+            aux_copy: dict[int | str, bytes | None] = {
+                k: v for k, v in self._auxiliary_images.items()
+            }
             # Include secondary ANPR camera snapshots (e.g. Rear ANPR Cam 2) in auxiliary images
             # so they get spooled into local SQLite spool_images
             for sec_idx, sec_img in self._secondary_anpr_images.items():
-                if sec_img and sec_idx not in aux_copy:
-                    aux_copy[sec_idx] = sec_img
+                if sec_img:
+                    aux_copy[f"anpr_{sec_idx}"] = sec_img
 
             total_samples = len(self._cam1_plates)
             total_frames = len(self._cam1_frames)
