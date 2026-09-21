@@ -1,13 +1,13 @@
 """
 gluvok.py — Gluvok Cloud API Integration Client
 ===============================================
-Handles stateless IoT device authentication, Indian vehicle plate sanitization,
-RFC 2397 base64 payload construction, and POST transmission to Gluvok API (/api/entries).
+Handles HTTP Basic Authentication (-u device_id:device_key), multipart/form-data
+weighment transmission matching the official curl specification, and anti-duplicate
+verification against Gluvok API (/api/entries).
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import re
 from typing import Any
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 def get_device_headers() -> dict[str, str]:
     """
-    Returns custom authentication headers required for edge device requests.
-    - x-device-id: Integer primary key from the devices table
-    - x-device-key: Raw pre-shared key
+    Returns custom authentication headers if required by specific endpoints.
+    - x-device-id: Identifier from devices table
+    - x-device-key: Pre-shared key
     """
     return {
         "x-device-id": str(config.device_id),
@@ -42,47 +42,15 @@ def sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]:
     Returns tuple of (detected_vehicle_number, vehicle_number).
     Ensures vehicle_number complies with Indian plate format for API validation.
     """
-    raw = str(raw_plate or "UNKNOWN_PLATE").strip().upper()
+    raw = str(raw_plate or "").strip().upper()
     cleaned = re.sub(r"[^A-Z0-9]", "", raw)
 
     if INDIAN_PLATE_REGEX.match(cleaned):
-        return raw, cleaned
+        return cleaned, cleaned
 
-    # Fallback formatting if raw is close to valid
-    if len(cleaned) >= 8 and cleaned[:2].isalpha():
-        return raw, cleaned
-
-    # If raw plate was unreadable or failed OCR, send raw as detected and fallback format as vehicle_number
+    # If raw plate was unreadable or does not match regex, fallback to valid placeholder format
     fallback_plate = "MH00XX0000"
-    return raw, fallback_plate
-
-
-def _build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]:
-    """Builds the API entry payload with base64 images list from session dictionary."""
-    images_list: list[str] = []
-    weight_val = float(session_payload.get("weight", 0.0))
-    raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
-    detected_plate, _ = sanitize_vehicle_number(raw_plate)
-
-    cam1_bytes = session_payload.get("cam1_final_image")
-    if cam1_bytes:
-        b64_str = base64.b64encode(cam1_bytes).decode("utf-8")
-        images_list.append(f"data:image/jpeg;base64,{b64_str}")
-
-    aux_images = session_payload.get("auxiliary_images", {})
-    if isinstance(aux_images, dict):
-        for cam_idx in sorted(aux_images.keys()):
-            img_bytes = aux_images[cam_idx]
-            if img_bytes:
-                b64_aux = base64.b64encode(img_bytes).decode("utf-8")
-                images_list.append(f"data:image/jpeg;base64,{b64_aux}")
-
-    return {
-        "detected_vehicle_number": detected_plate,
-        "weight": round(weight_val, 3),
-        "center_id": config.center_id,
-        "images": images_list,
-    }
+    return fallback_plate, fallback_plate
 
 
 def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -> None:
@@ -94,102 +62,225 @@ def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -
         record_system_event(event_type, message)
 
 
-def _handle_success_response(response: requests.Response, payload: dict[str, Any]) -> None:
-    """Log and record telemetry for a successful entry creation."""
-    res_data = response.json() if response.content else {}
-    entry_id = res_data.get("data", {}).get("id", "N/A")
-    logger.info(
-        f"[Gluvok API] Entry created successfully! Entry ID: {entry_id} (HTTP {response.status_code})"
-    )
-    _record_cloud_event(
-        "CLOUD",
-        f"Entry #{entry_id} created: {payload.get('detected_vehicle_number')} @ {payload.get('weight')} kg",
-    )
+def transmit_entry_multipart(
+    center_id: int,
+    detected_vehicle_number: str,
+    weight: float,
+    image_bytes: bytes | None = None,
+    filename: str = "truck_001.jpg",
+    images: list[tuple[str, bytes]] | None = None,
+) -> tuple[bool, str | None, str | None, bool]:
+    """
+    Submits vehicle weighment session to Gluvok API (/api/entries) matching the curl specification:
+      curl -X POST "https://gluvok.vercel.app/api/entries" \\
+        -u "pi1:hardware123" \\
+        -F "center_id=1" \\
+        -F "detected_vehicle_number=MH12AB1234" \\
+        -F "weight=18540.5" \\
+        -F "file=@/home/pi/captures/truck_cam1.jpg;type=image/jpeg" \\
+        -F "file=@/home/pi/captures/truck_aux_2.jpg;type=image/jpeg" ...
 
+    Supports transmitting all connected camera images (ANPR + Auxiliary overview cameras).
 
-def _handle_error_status(status_code: int, response_text: str) -> None:
-    """Log and record telemetry for non-success HTTP statuses."""
-    error_events: dict[int, tuple[str, str, str]] = {
-        401: (
-            "[Gluvok API] 401 Unauthorized: Missing or invalid device authentication headers.",
-            "CLOUD_AUTH_FAILED",
-            "401 Unauthorized: Missing device authentication headers",
-        ),
-        403: (
-            "[Gluvok API] 403 Forbidden: Invalid device key, device not found, or device deactivated.",
-            "CLOUD_AUTH_FORBIDDEN",
-            "403 Forbidden: Invalid device key, not found, or deactivated",
-        ),
-        400: (
-            f"[Gluvok API] 400 Bad Request: Validation failed: {response_text}",
-            "CLOUD_VALIDATION_ERROR",
-            f"400 Bad Request: {response_text}",
-        ),
+    Returns:
+        (success: bool, entry_id: str | None, error_message: str | None, is_read_timeout: bool)
+    """
+    if not config.device_id or not config.device_key:
+        msg = "Device credentials (device_id, device_key) not configured."
+        logger.warning(f"[Gluvok API] POST entry aborted: {msg}")
+        _record_cloud_event("CLOUD_AUTH_FAILED", msg, is_error=True)
+        return False, None, msg, False
+
+    entries_url = f"{GLUVOK_BASE_URL}/api/entries"
+    auth = (str(config.device_id), config.device_key)
+
+    _, safe_plate = sanitize_vehicle_number(detected_vehicle_number)
+
+    data = {
+        "center_id": str(center_id),
+        "detected_vehicle_number": safe_plate,
+        "weight": str(round(weight, 3)),
     }
-    if status_code in error_events:
-        log_msg, event_type, event_msg = error_events[status_code]
+
+    # Collect valid images from images list or single image_bytes
+    valid_images: list[tuple[str, bytes]] = []
+    if images:
+        for fname, b in images:
+            if b and isinstance(b, bytes) and len(b) > 0:
+                valid_images.append((fname, b))
+
+    if not valid_images and image_bytes and isinstance(image_bytes, bytes) and len(image_bytes) > 0:
+        valid_images.append((filename, image_bytes))
+
+    # In curl -F, multipart/form-data is always used. In requests, passing files
+    # forces multipart/form-data encoding with boundary even if image is not present.
+    if valid_images:
+        files: list[tuple[str, tuple[str, bytes, str]]] = [
+            ("file", (fn, b, "image/jpeg")) for fn, b in valid_images
+        ]
     else:
-        log_msg = f"[Gluvok API] POST /api/entries failed HTTP {status_code}: {response_text}"
-        event_type = "CLOUD_UPLOAD_ERROR"
-        event_msg = f"HTTP {status_code}"
-    logger.error(log_msg)
-    _record_cloud_event(event_type, event_msg, is_error=True)
+        files = [("file", (filename, b"", "image/jpeg"))]
+
+    logger.info(
+        f"[Gluvok API] Transmitting multipart entry to {entries_url}: "
+        f"Vehicle='{safe_plate}', Weight={weight:.3f} kg, Center ID={center_id}, Images={len(valid_images)}"
+    )
+
+    try:
+        response = requests.post(
+            entries_url,
+            auth=auth,
+            data=data,
+            files=files,
+            timeout=CLOUD_POST_TIMEOUT,
+        )
+
+        # If remote cloud storage bucket upload failed (e.g. Supabase bucket misconfiguration),
+        # retry with empty file payload so the weighment record is safely saved to the cloud DB.
+        if response.status_code == 400 and valid_images and "storage" in response.text.lower():
+            logger.warning(
+                "[Gluvok API] Cloud storage bucket failed on remote server. "
+                "Retrying without image payload to guarantee weighment entry is saved..."
+            )
+            fallback_files = [("file", (filename, b"", "image/jpeg"))]
+            response = requests.post(
+                entries_url,
+                auth=auth,
+                data=data,
+                files=fallback_files,
+                timeout=CLOUD_POST_TIMEOUT,
+            )
+
+        # 200 OK / 201 Created
+        if response.status_code in (200, 201):
+            res_data = response.json() if response.content else {}
+            entry_id = str(res_data.get("data", {}).get("id") or res_data.get("id") or "N/A")
+            logger.info(f"[Gluvok API] Entry #{entry_id} created successfully (HTTP {response.status_code})")
+            _record_cloud_event(
+                "CLOUD",
+                f"Entry #{entry_id} created: {safe_plate} @ {weight:.3f} kg",
+            )
+            return True, entry_id, None, False
+
+        # 409 Conflict: Already exists / idempotent duplicate acknowledgement
+        if response.status_code == 409:
+            res_data = response.json() if response.content else {}
+            entry_id = str(res_data.get("data", {}).get("id") or res_data.get("id") or "EXISTING")
+            logger.info(f"[Gluvok API] Entry already acknowledged by cloud (HTTP 409 Conflict). ID: {entry_id}")
+            _record_cloud_event("CLOUD", f"Entry already exists in cloud: {detected_vehicle_number}")
+            return True, entry_id, None, False
+
+        # Error status handling
+        err_msg = f"HTTP {response.status_code}: {response.text}"
+        if response.status_code == 401:
+            _record_cloud_event("CLOUD_AUTH_FAILED", err_msg, is_error=True)
+        elif response.status_code == 403:
+            _record_cloud_event("CLOUD_AUTH_FORBIDDEN", err_msg, is_error=True)
+        elif response.status_code == 400:
+            _record_cloud_event("CLOUD_VALIDATION_ERROR", err_msg, is_error=True)
+        else:
+            _record_cloud_event("CLOUD_UPLOAD_ERROR", err_msg, is_error=True)
 
 
-def _handle_response_status(response: requests.Response, payload: dict[str, Any]) -> None:
-    """Evaluates HTTP response status code and logs telemetry events."""
-    if response.status_code in (200, 201):
-        _handle_success_response(response, payload)
-        return
-    _handle_error_status(response.status_code, response.text)
+        logger.error(f"[Gluvok API] POST /api/entries failed {err_msg}")
+        return False, None, err_msg, False
+
+    except requests.exceptions.ReadTimeout as e:
+        err_msg = f"ReadTimeout: {e}"
+        logger.warning(f"[Gluvok API] Read timeout awaiting response from server: {err_msg}")
+        _record_cloud_event("CLOUD_UPLOAD_ERROR", err_msg, is_error=True)
+        return False, None, err_msg, True
+
+    except (requests.RequestException, OSError, ValueError) as e:
+        err_msg = f"{type(e).__name__}: {e}"
+        logger.error(f"[Gluvok API] Network exception during transmission: {err_msg}")
+        _record_cloud_event("CLOUD_UPLOAD_ERROR", err_msg, is_error=True)
+        return False, None, err_msg, False
+
+
+def verify_entry_in_cloud(
+    center_id: int,
+    detected_vehicle_number: str,
+    weight: float,
+) -> str | None:
+    """
+    Verifies if an entry with matching vehicle and weight exists in the cloud.
+    Called specifically after an ambiguous ReadTimeout to prevent creating duplicate entries.
+    """
+    if not config.device_id or not config.device_key:
+        return None
+
+    entries_url = f"{GLUVOK_BASE_URL}/api/entries"
+    auth = (str(config.device_id), config.device_key)
+    _, safe_plate = sanitize_vehicle_number(detected_vehicle_number)
+    params = {
+        "center_id": str(center_id),
+        "detected_vehicle_number": safe_plate,
+    }
+
+    try:
+        response = requests.get(entries_url, auth=auth, params=params, timeout=10.0)
+        if response.status_code == 200:
+            res_data = response.json()
+            entries = res_data.get("data", []) if isinstance(res_data, dict) else []
+            if isinstance(entries, list):
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    entry_weight = float(entry.get("weight", 0.0))
+                    # Check if weight matches within 2.0 kg tolerance
+                    if abs(entry_weight - weight) <= 2.0:
+                        entry_id = str(entry.get("id", "VERIFIED"))
+                        logger.info(
+                            f"[Gluvok API] Pre-retry verification found entry #{entry_id} in cloud. "
+                            f"Duplicate upload prevented!"
+                        )
+                        return entry_id
+    except (requests.RequestException, ValueError, KeyError) as e:
+        logger.debug(f"[Gluvok API] Verification query returned error: {e}")
+
+    return None
 
 
 def post_to_cloud(session_payload: dict[str, Any]) -> None:
     """
-    Submits vehicle weighment session to Gluvok API (/api/entries).
-    Authenticates statelessly via custom headers (x-device-id, x-device-key).
+    Bridge function: transmits entry from session dictionary and updates telemetry.
+    Preserved for direct callers; does NOT wipe session_payload on completion.
     """
-    if not config.device_id or not config.device_key:
-        logger.warning(
-            "[Gluvok API] POST entry aborted: Device credentials (device_id, device_key) not configured."
-        )
-        _record_cloud_event(
-            "CLOUD_AUTH_FAILED",
-            "Device credentials not configured in config.json",
-            is_error=True,
-        )
-        return
+    center_id = int(config.center_id)
+    raw_plate = str(session_payload.get("anpr_plate", "NO_PLATE_DETECTED"))
+    detected_plate, _ = sanitize_vehicle_number(raw_plate)
+    weight = float(session_payload.get("weight", 0.0))
 
-    entries_url = f"{GLUVOK_BASE_URL}/api/entries"
-    logger.info(f"[Gluvok API] Transmitting weighment entry to: {entries_url}")
+    images_to_send: list[tuple[str, bytes]] = []
+    cam1_bytes = session_payload.get("cam1_final_image")
+    if cam1_bytes and isinstance(cam1_bytes, bytes):
+        images_to_send.append(("truck_cam1.jpg", cam1_bytes))
 
-    payload = _build_entry_payload(session_payload)
+    aux_dict = session_payload.get("auxiliary_images", {})
+    if isinstance(aux_dict, dict):
+        for idx, b in aux_dict.items():
+            if b and isinstance(b, bytes):
+                images_to_send.append((f"truck_aux_{idx}.jpg", b))
 
-    logger.info(
-        f"[Gluvok API] Transmitting payload: Detected Vehicle='{payload.get('detected_vehicle_number')}', "
-        f"Weight={payload['weight']} kg, Center ID={payload['center_id']}, Images={len(payload['images'])}"
+    if not images_to_send and "images" in session_payload:
+        for idx, b in enumerate(session_payload["images"]):
+            if b and isinstance(b, bytes):
+                images_to_send.append((f"truck_{idx+1}.jpg", b))
+
+    transmit_entry_multipart(
+        center_id=center_id,
+        detected_vehicle_number=detected_plate,
+        weight=weight,
+        images=images_to_send,
     )
-
-    headers = {
-        "Content-Type": "application/json",
-        "Connection": "close",
-        **get_device_headers(),
-    }
-
-    try:
-        response = requests.post(entries_url, json=payload, headers=headers, timeout=CLOUD_POST_TIMEOUT)
-        _handle_response_status(response, payload)
-    except (requests.RequestException, ValueError, KeyError) as e:
-        logger.error(f"[Gluvok API] Network exception during entry transmission: {e}")
-        _record_cloud_event("CLOUD_UPLOAD_ERROR", str(e), is_error=True)
-    finally:
-        session_payload.clear()
 
 
 __all__ = [
     "GLUVOK_BASE_URL",
-    "_build_entry_payload",
     "get_device_headers",
     "post_to_cloud",
     "sanitize_vehicle_number",
+    "transmit_entry_multipart",
+    "verify_entry_in_cloud",
 ]

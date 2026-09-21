@@ -47,11 +47,19 @@ def _validate_serial_settings(port: Any, baud: Any) -> tuple[bool, str | None]:
 
 def _validate_camera_urls(
     anpr_cam: Any,
+    anpr_cams: Any,
     aux_cams: Any,
     anpr_server: Any,
 ) -> tuple[bool, str | None]:
     if anpr_cam is not None and not is_valid_url(str(anpr_cam)):
         return False, "ANPR Camera URL must start with http://, https://, or rtsp://"
+
+    if anpr_cams is not None:
+        if not isinstance(anpr_cams, list):
+            return False, "ANPR camera URLs must be a list."
+        for u in anpr_cams:
+            if not is_valid_url(str(u)):
+                return False, f"Invalid ANPR camera URL: {u}"
 
     if anpr_server is not None and not is_valid_url(str(anpr_server), allowed_schemes=("http://", "https://")):
         return False, "ANPR Server URL must start with http:// or https://"
@@ -81,6 +89,7 @@ def validate_config_payload(data: dict[str, Any]) -> tuple[bool, str | None]:
 
     valid_cams, err_cams = _validate_camera_urls(
         data.get("anpr_camera_url"),
+        data.get("anpr_camera_urls"),
         data.get("auxiliary_camera_urls"),
         data.get("anpr_server_url"),
     )

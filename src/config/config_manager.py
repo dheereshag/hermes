@@ -7,6 +7,11 @@ import threading
 from typing import Any
 
 from src.config.constants import (
+    DEFAULT_ANPR_CAMERA_URLS,
+    DEFAULT_AUXILIARY_CAMERA_URLS,
+    DEFAULT_CENTER_ID,
+    DEFAULT_DEVICE_ID,
+    DEFAULT_DEVICE_KEY,
     DEFAULT_SERIAL_BAUDRATE,
     DEFAULT_SERIAL_PORT,
     DEFAULT_WEIGHT_THRESHOLD,
@@ -25,20 +30,31 @@ class ConfigManager:
         self.file_path = file_path
         self.wifi_ssid = ""
         self.wifi_password = ""
-        self.center_id = 1
+        self.center_id = DEFAULT_CENTER_ID
         self.weight_threshold = DEFAULT_WEIGHT_THRESHOLD
-        self.device_id = 1
-        self.device_key = ""
+        self.device_id: int | str = DEFAULT_DEVICE_ID
+        self.device_key = DEFAULT_DEVICE_KEY
+
         self.anpr_server_url = ""
         self.serial_port = DEFAULT_SERIAL_PORT
         self.serial_baudrate = DEFAULT_SERIAL_BAUDRATE
-        self.anpr_camera_url = "http://192.168.1.101/cgi-bin/snapshot.cgi"
-        self.auxiliary_camera_urls: list[str] = [
-            "http://192.168.1.102/cgi-bin/snapshot.cgi",
-            "http://192.168.1.103/cgi-bin/snapshot.cgi",
-            "http://192.168.1.104/cgi-bin/snapshot.cgi",
-        ]
+        self.anpr_camera_urls: list[str] = list(DEFAULT_ANPR_CAMERA_URLS)
+        self.auxiliary_camera_urls: list[str] = list(DEFAULT_AUXILIARY_CAMERA_URLS)
         self.load_settings()
+
+    @property
+    def anpr_camera_url(self) -> str:
+        """Backward-compatible access to primary ANPR Camera 1 URL."""
+        return self.anpr_camera_urls[0] if self.anpr_camera_urls else ""
+
+    @anpr_camera_url.setter
+    def anpr_camera_url(self, value: str) -> None:
+        val = str(value).strip()
+        if val:
+            if self.anpr_camera_urls:
+                self.anpr_camera_urls[0] = val
+            else:
+                self.anpr_camera_urls = [val]
 
     def load_settings(self) -> None:
         with self._lock:
@@ -47,10 +63,10 @@ class ConfigManager:
                 self.save_settings(
                     ssid="",
                     password="",
-                    center_id=1,
-                    min_weight=50.0,
-                    device_id=1,
-                    device_key="",
+                    center_id=DEFAULT_CENTER_ID,
+                    min_weight=DEFAULT_WEIGHT_THRESHOLD,
+                    device_id=DEFAULT_DEVICE_ID,
+                    device_key=DEFAULT_DEVICE_KEY,
                     anpr_url="",
                 )
                 return
@@ -61,21 +77,32 @@ class ConfigManager:
 
                 self.wifi_ssid = data.get("ssid", "")
                 self.wifi_password = data.get("password", "")
-                self.center_id = int(data.get("center_id", 1))
-                self.weight_threshold = float(data.get("min_weight", 50.0))
-                self.device_id = int(data.get("device_id", 1))
-                self.device_key = str(data.get("device_key", ""))
+                self.center_id = int(data.get("center_id", DEFAULT_CENTER_ID))
+                raw_device_id = data.get("device_id")
+                if not raw_device_id or raw_device_id == 1 or raw_device_id == "1":
+                    self.device_id = DEFAULT_DEVICE_ID
+                else:
+                    try:
+                        self.device_id = int(raw_device_id)
+                    except (ValueError, TypeError):
+                        self.device_id = str(raw_device_id)
+                self.device_key = str(data.get("device_key") or DEFAULT_DEVICE_KEY)
+
                 self.anpr_server_url = data.get("anpr_server_url", "")
                 self.serial_port = data.get("serial_port", "/dev/ttyAMA0")
                 self.serial_baudrate = int(data.get("serial_baudrate", 1200))
-                self.anpr_camera_url = data.get(
-                    "anpr_camera_url", "http://192.168.1.101/cgi-bin/snapshot.cgi"
+
+                raw_anpr = data.get("anpr_camera_urls")
+                if isinstance(raw_anpr, list):
+                    self.anpr_camera_urls = [str(u).strip() for u in raw_anpr if str(u).strip()]
+                elif "anpr_camera_url" in data and str(data["anpr_camera_url"]).strip():
+                    self.anpr_camera_urls = [str(data["anpr_camera_url"]).strip()]
+                else:
+                    self.anpr_camera_urls = list(DEFAULT_ANPR_CAMERA_URLS)
+
+                self.auxiliary_camera_urls = data.get(
+                    "auxiliary_camera_urls", list(DEFAULT_AUXILIARY_CAMERA_URLS)
                 )
-                self.auxiliary_camera_urls = data.get("auxiliary_camera_urls", [
-                    "http://192.168.1.102/cgi-bin/snapshot.cgi",
-                    "http://192.168.1.103/cgi-bin/snapshot.cgi",
-                    "http://192.168.1.104/cgi-bin/snapshot.cgi",
-                ])
 
                 logger.info("Configurations loaded from JSON storage:")
                 logger.info(f" -> SSID: {self.wifi_ssid}")
@@ -83,7 +110,7 @@ class ConfigManager:
                 logger.info(f" -> Center ID: {self.center_id}")
                 logger.info(f" -> Min Weight Threshold: {self.weight_threshold:.1f}")
                 logger.info(f" -> Serial Port: {self.serial_port} @ {self.serial_baudrate} baud")
-                logger.info(f" -> ANPR Camera: {self.anpr_camera_url}")
+                logger.info(f" -> ANPR Cameras: {len(self.anpr_camera_urls)} configured ({self.anpr_camera_url})")
                 logger.info(f" -> Auxiliary Cameras: {len(self.auxiliary_camera_urls)} configured")
                 if self.anpr_server_url:
                     logger.info(f" -> ANPR Server URL Override: {self.anpr_server_url}")
@@ -103,6 +130,7 @@ class ConfigManager:
             "serial_port": self.serial_port,
             "serial_baudrate": self.serial_baudrate,
             "anpr_camera_url": self.anpr_camera_url,
+            "anpr_camera_urls": list(self.anpr_camera_urls),
             "auxiliary_camera_urls": list(self.auxiliary_camera_urls),
         }
 
@@ -121,10 +149,10 @@ class ConfigManager:
         self,
         ssid: str,
         password: str,
-        center_id: int,
-        min_weight: float,
-        device_id: int = 1,
-        device_key: str = "",
+        center_id: int = DEFAULT_CENTER_ID,
+        min_weight: float = DEFAULT_WEIGHT_THRESHOLD,
+        device_id: int | str = DEFAULT_DEVICE_ID,
+        device_key: str = DEFAULT_DEVICE_KEY,
         anpr_url: str | None = None,
     ) -> None:
         with self._lock:
@@ -132,8 +160,12 @@ class ConfigManager:
             self.wifi_password = password
             self.center_id = int(center_id)
             self.weight_threshold = float(min_weight)
-            self.device_id = int(device_id)
+            try:
+                self.device_id = int(device_id)
+            except (ValueError, TypeError):
+                self.device_id = str(device_id)
             self.device_key = str(device_key)
+
             if anpr_url is not None:
                 self.anpr_server_url = anpr_url
             self._persist()
@@ -144,8 +176,10 @@ class ConfigManager:
         serial_port: str | None = None,
         serial_baudrate: int | None = None,
         anpr_camera_url: str | None = None,
+        anpr_camera_urls: list[str] | None = None,
         auxiliary_camera_urls: list[str] | None = None,
         anpr_server_url: str | None = None,
+        center_id: int | None = None,
     ) -> None:
         """Update system configuration fields and persist to config.json."""
         with self._lock:
@@ -155,21 +189,41 @@ class ConfigManager:
                 self.serial_port = str(serial_port).strip()
             if serial_baudrate is not None:
                 self.serial_baudrate = int(serial_baudrate)
-            if anpr_camera_url is not None:
-                self.anpr_camera_url = str(anpr_camera_url).strip()
+            if anpr_camera_urls is not None:
+                cleaned_anpr = [str(u).strip() for u in anpr_camera_urls if str(u).strip()]
+                if cleaned_anpr:
+                    self.anpr_camera_urls = cleaned_anpr
+            elif anpr_camera_url is not None:
+                val = str(anpr_camera_url).strip()
+                if val:
+                    self.anpr_camera_urls = [val]
             if auxiliary_camera_urls is not None:
                 self.auxiliary_camera_urls = [str(u).strip() for u in auxiliary_camera_urls if str(u).strip()]
             if anpr_server_url is not None:
                 self.anpr_server_url = str(anpr_server_url).strip()
+            if center_id is not None:
+                self.center_id = int(center_id)
             self._persist()
             logger.info("[Config] System configuration updated via web interface.")
 
-    def update_device_credentials(self, device_id: int, device_key: str) -> None:
+
+    def update_device_credentials(
+        self,
+        device_id: int | str,
+        device_key: str,
+        center_id: int | None = None,
+    ) -> None:
         with self._lock:
-            self.device_id = int(device_id)
-            self.device_key = str(device_key)
+            try:
+                self.device_id = int(device_id)
+            except (ValueError, TypeError):
+                self.device_id = str(device_id)
+            self.device_key = str(device_key).strip()
+            if center_id is not None:
+                self.center_id = int(center_id)
             self._persist()
             logger.info(f"[Config] Device credentials updated for Device ID: {self.device_id}.")
+
 
     def update_wifi_credentials(self, ssid: str, password: str) -> None:
         with self._lock:

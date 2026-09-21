@@ -8,6 +8,7 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from src.config.config_manager import config
+from src.core import get_spool_stats
 from src.core.telemetry import (
     get_error_counts,
     get_latest_weighment,
@@ -116,11 +117,11 @@ def status():
         },
         "cloud": {
             "center_id": config.center_id,
-            "device_id": config.device_id,
             "configured": bool(config.device_id and config.device_key),
         },
         "cameras": {
             "cam1_url": config.anpr_camera_url,
+            "anpr_urls": config.anpr_camera_urls,
             "auxiliary_urls": config.auxiliary_camera_urls,
         },
         "wifi": {
@@ -129,18 +130,21 @@ def status():
         },
         "config": {
             "wifi_ssid": config.wifi_ssid,
-            "device_id": config.device_id,
+            "center_id": config.center_id,
             "min_weight": config.weight_threshold,
             "serial_port": config.serial_port,
             "serial_baudrate": config.serial_baudrate,
             "anpr_camera_url": config.anpr_camera_url,
+            "anpr_camera_urls": config.anpr_camera_urls,
             "auxiliary_camera_urls": config.auxiliary_camera_urls,
             "anpr_server_url": config.anpr_server_url,
         },
         "latest_weighment": get_latest_weighment(),
+        "spool": get_spool_stats(),
         "error_counts": get_error_counts(),
         "events": get_system_events(),
     }), 200
+
 
 
 @api_bp.route("/config", methods=["GET"])
@@ -151,8 +155,10 @@ def get_config():
         "serial_port": config.serial_port,
         "serial_baudrate": config.serial_baudrate,
         "anpr_camera_url": config.anpr_camera_url,
+        "anpr_camera_urls": config.anpr_camera_urls,
         "auxiliary_camera_urls": config.auxiliary_camera_urls,
         "anpr_server_url": config.anpr_server_url,
+        "center_id": config.center_id,
     }), 200
 
 
@@ -173,9 +179,13 @@ def post_config():
         serial_port=data.get("serial_port"),
         serial_baudrate=data.get("serial_baudrate"),
         anpr_camera_url=data.get("anpr_camera_url"),
+        anpr_camera_urls=data.get("anpr_camera_urls"),
         auxiliary_camera_urls=data.get("auxiliary_camera_urls"),
         anpr_server_url=data.get("anpr_server_url"),
+        center_id=data.get("center_id"),
     )
+
+
 
     _apply_uart_config_changes(
         data.get("serial_port"),

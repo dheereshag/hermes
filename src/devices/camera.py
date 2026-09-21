@@ -121,7 +121,42 @@ def capture_auxiliary_snapshots(
     return results
 
 
+def capture_anpr_snapshots(
+    camera_urls: list[str] | None = None,
+) -> list[tuple[int, str, bytes | None]]:
+    """
+    Concurrently captures snapshot images from all configured ANPR cameras (e.g. Front, Rear).
+    Returns a list of tuples: (camera_index, camera_url, image_bytes_or_none).
+    Camera index is 1-based (1 for Front ANPR, 2 for Rear ANPR, etc.)
+    """
+    urls = camera_urls if camera_urls is not None else config.anpr_camera_urls
+    if not urls:
+        return []
+
+    if len(urls) == 1:
+        img_bytes = fetch_image_bytes(urls[0])
+        return [(1, urls[0], img_bytes)]
+
+    workers = min(len(urls), MAX_PARALLEL_CAMERA_WORKERS)
+    results_dict: dict[int, bytes | None] = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_idx = {
+            executor.submit(fetch_image_bytes, url): idx + 1
+            for idx, url in enumerate(urls)
+        }
+        for future in as_completed(future_to_idx):
+            cam_idx = future_to_idx[future]
+            try:
+                results_dict[cam_idx] = future.result()
+            except (requests.RequestException, OSError, ValueError, RuntimeError) as exc:
+                logger.error(f"[Camera] ANPR Camera {cam_idx} generated exception: {exc}")
+                results_dict[cam_idx] = None
+
+    return [(idx + 1, url, results_dict.get(idx + 1)) for idx, url in enumerate(urls)]
+
+
 __all__ = [
+    "capture_anpr_snapshots",
     "capture_auxiliary_snapshots",
     "fetch_image_bytes",
 ]

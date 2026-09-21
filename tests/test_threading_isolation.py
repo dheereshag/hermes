@@ -10,28 +10,25 @@ from src.core.stability import ScaleStabilityMachine
 
 class TestThreadingIsolation(unittest.TestCase):
     def test_trigger_upload_is_non_blocking(self):
+        from src.core.db import get_spool_stats, init_db, reset_db
+
+        init_db()
+        reset_db()
         machine = ScaleStabilityMachine()
-        called_event = threading.Event()
-
-        def slow_post_to_cloud(payload):
-            time.sleep(0.3)
-            called_event.set()
-
-        package = {"session_id": "TEST_SESSION_ASYNC", "weight": 25000.0}
+        package = {"session_id": "TEST_SESSION_ASYNC", "weight": 25000.0, "anpr_plate": "MH12AB1234"}
 
         start_time = time.time()
-        with patch("src.integrations.gluvok.post_to_cloud", side_effect=slow_post_to_cloud):
-            upload_thread = machine._trigger_upload(package)
-
+        session_id = machine._trigger_upload(package)
         elapsed = time.time() - start_time
-        # Trigger should return instantaneously (< 0.1s), NOT wait for 0.3s
-        self.assertLess(elapsed, 0.1)
-        self.assertTrue(isinstance(upload_thread, threading.Thread))
-        self.assertTrue(upload_thread.name.startswith("CloudUpload_"))
-        self.assertTrue(upload_thread.daemon)
 
-        upload_thread.join(timeout=1.0)
-        self.assertTrue(called_event.is_set())
+        # Trigger should return instantaneously (< 0.05s) to never stall scale UART
+        self.assertLess(elapsed, 0.05)
+        self.assertEqual(session_id, "TEST_SESSION_ASYNC")
+
+        stats = get_spool_stats()
+        self.assertEqual(stats["pending"], 1)
+        reset_db()
+
 
     @patch("src.core.session.capture_auxiliary_snapshots")
     def test_on_weight_stabilized_is_non_blocking(self, mock_capture):

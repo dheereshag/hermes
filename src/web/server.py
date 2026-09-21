@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
-from werkzeug.serving import BaseWSGIServer, make_server
+from werkzeug.serving import BaseWSGIServer, WSGIRequestHandler, make_server
 
 from src.core.telemetry import (
     get_error_counts,
@@ -17,6 +18,24 @@ from src.core.telemetry import (
 from src.web.app import create_app
 
 logger = logging.getLogger(__name__)
+
+
+class HermesWSGIRequestHandler(WSGIRequestHandler):
+    """Custom WSGI request handler that catches and explains HTTPS-on-HTTP connection attempts."""
+
+    def log_error(self, format: str, *args: Any) -> None:
+        # Check if the error is due to an HTTPS/SSL handshake on plain HTTP port (\x16\x03...)
+        for a in args:
+            rep = repr(a)
+            if "\\x16" in rep or "\\x03" in rep or (isinstance(a, str) and "\x16" in a):
+                client_ip = getattr(self, "client_address", ["Client"])[0]
+                logger.warning(
+                    f"[WebServer] HTTPS (SSL) request detected from {client_ip}. "
+                    f"Hermes runs on plain HTTP. Please ensure you type 'http://' (NOT 'https://') "
+                    f"in your browser address bar: http://<pi-ip>:8080/config"
+                )
+                return
+        super().log_error(format, *args)
 
 
 class FallbackWebServer:
@@ -39,7 +58,9 @@ class FallbackWebServer:
             # Silence standard Werkzeug request logging to keep terminal clean
             logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
-            self._server = make_server(self.host, self.port, flask_app)
+            self._server = make_server(
+                self.host, self.port, flask_app, request_handler=HermesWSGIRequestHandler
+            )
             self._is_running = True
             self._thread = threading.Thread(
                 target=self._server.serve_forever,
