@@ -16,19 +16,29 @@ from typing import Any
 
 import requests
 
-from src.config.config_manager import config
 from src.config.constants import (
     ANPR_CAPTURE_INTERVAL,
     POST_STABILITY_DURATION,
 )
 from src.core.telemetry import record_system_event, record_weighment_result
-from src.devices.camera import capture_auxiliary_snapshots, fetch_image_bytes
+from src.devices.camera import (
+    capture_anpr_snapshots,
+    capture_auxiliary_snapshots,
+    fetch_image_bytes,
+)
 from src.integrations.anpr import (
     get_highest_frequency_plate,
     send_frame_to_anpr_server,
 )
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "SessionPhase",
+    "WeighbridgeSessionManager",
+    "fetch_image_bytes",
+]
+
 
 
 class SessionPhase(Enum):
@@ -48,6 +58,7 @@ class WeighbridgeSessionManager:
         self._cam1_plates: list[str] = []
         self._cam1_statuses: list[str] = []
         self._auxiliary_images: dict[int, bytes | None] = {}
+        self._secondary_anpr_images: dict[int, bytes | None] = {}
 
         self._anpr_thread: threading.Thread | None = None
         self._aux_thread: threading.Thread | None = None
@@ -77,6 +88,7 @@ class WeighbridgeSessionManager:
             self._cam1_plates.clear()
             self._cam1_statuses.clear()
             self._auxiliary_images.clear()
+            self._secondary_anpr_images.clear()
             self._stop_anpr_event = threading.Event()
 
             logger.info(f"[Session] Started new weighbridge session: {self.session_id}")
@@ -84,7 +96,7 @@ class WeighbridgeSessionManager:
             current_session_id = self.session_id
             current_stop_event = self._stop_anpr_event
 
-            # Launch Camera 1 ANPR 2-second capture loop thread bound to this session
+            # Launch Camera ANPR capture loop thread bound to this session
             self._anpr_thread = threading.Thread(
                 target=self._anpr_loop,
                 args=(current_session_id, current_stop_event),
@@ -97,21 +109,28 @@ class WeighbridgeSessionManager:
             old_thread.join(timeout=0.3)
 
     def _capture_and_record_anpr_sample(self) -> None:
-        """Fetch one Camera 1 frame, buffer it, and record ANPR plate/status."""
-        img_bytes = fetch_image_bytes(config.anpr_camera_url)
-        if not img_bytes:
+        """Fetch frames from all configured ANPR cameras in parallel, buffer them, and query Argus."""
+        snapshots = capture_anpr_snapshots()
+        if not snapshots:
             return
 
-        with self._lock:
-            if len(self._cam1_frames) >= 5:
-                self._cam1_frames.pop(0)
-            self._cam1_frames.append(img_bytes)
+        for cam_idx, _cam_url, img_bytes in snapshots:
+            if not img_bytes:
+                continue
 
-        plate, status_code = send_frame_to_anpr_server(img_bytes)
-        with self._lock:
-            if plate:
-                self._cam1_plates.append(plate)
-            self._cam1_statuses.append(status_code)
+            with self._lock:
+                if cam_idx == 1:
+                    if len(self._cam1_frames) >= 5:
+                        self._cam1_frames.pop(0)
+                    self._cam1_frames.append(img_bytes)
+                else:
+                    self._secondary_anpr_images[cam_idx] = img_bytes
+
+            plate, status_code = send_frame_to_anpr_server(img_bytes)
+            with self._lock:
+                if plate:
+                    self._cam1_plates.append(plate)
+                self._cam1_statuses.append(status_code)
 
     def _anpr_loop(self, session_id: str, stop_event: threading.Event):
         """Background thread executing 2-second Camera 1 capture & ANPR requests."""
@@ -212,6 +231,12 @@ class WeighbridgeSessionManager:
 
             last_cam1_image = self._cam1_frames[-1] if self._cam1_frames else None
             aux_copy = dict(self._auxiliary_images)
+            # Include secondary ANPR camera snapshots (e.g. Rear ANPR Cam 2) in auxiliary images
+            # so they get spooled into local SQLite spool_images
+            for sec_idx, sec_img in self._secondary_anpr_images.items():
+                if sec_img and sec_idx not in aux_copy:
+                    aux_copy[sec_idx] = sec_img
+
             total_samples = len(self._cam1_plates)
             total_frames = len(self._cam1_frames)
 
@@ -229,6 +254,7 @@ class WeighbridgeSessionManager:
             # Immediately release intermediate frame buffers from RAM
             self._cam1_frames.clear()
             self._auxiliary_images.clear()
+            self._secondary_anpr_images.clear()
 
             logger.info(
                 f"[Session {self.session_id}] Package finalized: "
@@ -258,6 +284,7 @@ class WeighbridgeSessionManager:
             self._cam1_plates.clear()
             self._cam1_statuses.clear()
             self._auxiliary_images.clear()
+            self._secondary_anpr_images.clear()
 
         if old_anpr_thread and old_anpr_thread.is_alive():
             old_anpr_thread.join(timeout=0.3)

@@ -121,6 +121,7 @@ def status():
         },
         "cameras": {
             "cam1_url": config.anpr_camera_url,
+            "anpr_urls": config.anpr_camera_urls,
             "auxiliary_urls": config.auxiliary_camera_urls,
         },
         "wifi": {
@@ -134,6 +135,7 @@ def status():
             "serial_port": config.serial_port,
             "serial_baudrate": config.serial_baudrate,
             "anpr_camera_url": config.anpr_camera_url,
+            "anpr_camera_urls": config.anpr_camera_urls,
             "auxiliary_camera_urls": config.auxiliary_camera_urls,
             "anpr_server_url": config.anpr_server_url,
         },
@@ -153,6 +155,7 @@ def get_config():
         "serial_port": config.serial_port,
         "serial_baudrate": config.serial_baudrate,
         "anpr_camera_url": config.anpr_camera_url,
+        "anpr_camera_urls": config.anpr_camera_urls,
         "auxiliary_camera_urls": config.auxiliary_camera_urls,
         "anpr_server_url": config.anpr_server_url,
         "center_id": config.center_id,
@@ -176,6 +179,7 @@ def post_config():
         serial_port=data.get("serial_port"),
         serial_baudrate=data.get("serial_baudrate"),
         anpr_camera_url=data.get("anpr_camera_url"),
+        anpr_camera_urls=data.get("anpr_camera_urls"),
         auxiliary_camera_urls=data.get("auxiliary_camera_urls"),
         anpr_server_url=data.get("anpr_server_url"),
         center_id=data.get("center_id"),

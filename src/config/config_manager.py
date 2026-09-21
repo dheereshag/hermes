@@ -7,6 +7,8 @@ import threading
 from typing import Any
 
 from src.config.constants import (
+    DEFAULT_ANPR_CAMERA_URLS,
+    DEFAULT_AUXILIARY_CAMERA_URLS,
     DEFAULT_CENTER_ID,
     DEFAULT_DEVICE_ID,
     DEFAULT_DEVICE_KEY,
@@ -33,17 +35,26 @@ class ConfigManager:
         self.device_id: int | str = DEFAULT_DEVICE_ID
         self.device_key = DEFAULT_DEVICE_KEY
 
-
         self.anpr_server_url = ""
         self.serial_port = DEFAULT_SERIAL_PORT
         self.serial_baudrate = DEFAULT_SERIAL_BAUDRATE
-        self.anpr_camera_url = "http://192.168.1.101/cgi-bin/snapshot.cgi"
-        self.auxiliary_camera_urls: list[str] = [
-            "http://192.168.1.102/cgi-bin/snapshot.cgi",
-            "http://192.168.1.103/cgi-bin/snapshot.cgi",
-            "http://192.168.1.104/cgi-bin/snapshot.cgi",
-        ]
+        self.anpr_camera_urls: list[str] = list(DEFAULT_ANPR_CAMERA_URLS)
+        self.auxiliary_camera_urls: list[str] = list(DEFAULT_AUXILIARY_CAMERA_URLS)
         self.load_settings()
+
+    @property
+    def anpr_camera_url(self) -> str:
+        """Backward-compatible access to primary ANPR Camera 1 URL."""
+        return self.anpr_camera_urls[0] if self.anpr_camera_urls else ""
+
+    @anpr_camera_url.setter
+    def anpr_camera_url(self, value: str) -> None:
+        val = str(value).strip()
+        if val:
+            if self.anpr_camera_urls:
+                self.anpr_camera_urls[0] = val
+            else:
+                self.anpr_camera_urls = [val]
 
     def load_settings(self) -> None:
         with self._lock:
@@ -80,14 +91,18 @@ class ConfigManager:
                 self.anpr_server_url = data.get("anpr_server_url", "")
                 self.serial_port = data.get("serial_port", "/dev/ttyAMA0")
                 self.serial_baudrate = int(data.get("serial_baudrate", 1200))
-                self.anpr_camera_url = data.get(
-                    "anpr_camera_url", "http://192.168.1.101/cgi-bin/snapshot.cgi"
+
+                raw_anpr = data.get("anpr_camera_urls")
+                if isinstance(raw_anpr, list):
+                    self.anpr_camera_urls = [str(u).strip() for u in raw_anpr if str(u).strip()]
+                elif "anpr_camera_url" in data and str(data["anpr_camera_url"]).strip():
+                    self.anpr_camera_urls = [str(data["anpr_camera_url"]).strip()]
+                else:
+                    self.anpr_camera_urls = list(DEFAULT_ANPR_CAMERA_URLS)
+
+                self.auxiliary_camera_urls = data.get(
+                    "auxiliary_camera_urls", list(DEFAULT_AUXILIARY_CAMERA_URLS)
                 )
-                self.auxiliary_camera_urls = data.get("auxiliary_camera_urls", [
-                    "http://192.168.1.102/cgi-bin/snapshot.cgi",
-                    "http://192.168.1.103/cgi-bin/snapshot.cgi",
-                    "http://192.168.1.104/cgi-bin/snapshot.cgi",
-                ])
 
                 logger.info("Configurations loaded from JSON storage:")
                 logger.info(f" -> SSID: {self.wifi_ssid}")
@@ -95,7 +110,7 @@ class ConfigManager:
                 logger.info(f" -> Center ID: {self.center_id}")
                 logger.info(f" -> Min Weight Threshold: {self.weight_threshold:.1f}")
                 logger.info(f" -> Serial Port: {self.serial_port} @ {self.serial_baudrate} baud")
-                logger.info(f" -> ANPR Camera: {self.anpr_camera_url}")
+                logger.info(f" -> ANPR Cameras: {len(self.anpr_camera_urls)} configured ({self.anpr_camera_url})")
                 logger.info(f" -> Auxiliary Cameras: {len(self.auxiliary_camera_urls)} configured")
                 if self.anpr_server_url:
                     logger.info(f" -> ANPR Server URL Override: {self.anpr_server_url}")
@@ -115,6 +130,7 @@ class ConfigManager:
             "serial_port": self.serial_port,
             "serial_baudrate": self.serial_baudrate,
             "anpr_camera_url": self.anpr_camera_url,
+            "anpr_camera_urls": list(self.anpr_camera_urls),
             "auxiliary_camera_urls": list(self.auxiliary_camera_urls),
         }
 
@@ -160,6 +176,7 @@ class ConfigManager:
         serial_port: str | None = None,
         serial_baudrate: int | None = None,
         anpr_camera_url: str | None = None,
+        anpr_camera_urls: list[str] | None = None,
         auxiliary_camera_urls: list[str] | None = None,
         anpr_server_url: str | None = None,
         center_id: int | None = None,
@@ -172,8 +189,14 @@ class ConfigManager:
                 self.serial_port = str(serial_port).strip()
             if serial_baudrate is not None:
                 self.serial_baudrate = int(serial_baudrate)
-            if anpr_camera_url is not None:
-                self.anpr_camera_url = str(anpr_camera_url).strip()
+            if anpr_camera_urls is not None:
+                cleaned_anpr = [str(u).strip() for u in anpr_camera_urls if str(u).strip()]
+                if cleaned_anpr:
+                    self.anpr_camera_urls = cleaned_anpr
+            elif anpr_camera_url is not None:
+                val = str(anpr_camera_url).strip()
+                if val:
+                    self.anpr_camera_urls = [val]
             if auxiliary_camera_urls is not None:
                 self.auxiliary_camera_urls = [str(u).strip() for u in auxiliary_camera_urls if str(u).strip()]
             if anpr_server_url is not None:

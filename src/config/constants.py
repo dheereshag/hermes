@@ -21,11 +21,19 @@ STABILITY_DURATION = 10.0       # 10.0 seconds continuous stability required
 DEFAULT_WEIGHT_THRESHOLD = 50.0 # Minimum weight threshold in kg to start a session
 
 # ── Camera & ANPR Timing ──────────────────────────────────────────────────────
-ANPR_CAPTURE_INTERVAL = 2.0     # Seconds between Camera 1 ANPR capture attempts
+ANPR_CAPTURE_INTERVAL = 2.0     # Seconds between Camera ANPR capture attempts
 POST_STABILITY_DURATION = 10.0   # Seconds to capture ANPR after stability confirmed
 CAMERA_TIMEOUT = 3.0            # Seconds allowed for individual camera HTTP snapshot
 ANPR_SERVER_TIMEOUT = 15.0      # Seconds allowed for Argus ANPR HTTP POST
 MAX_PARALLEL_CAMERA_WORKERS = 4 # Thread pool workers for concurrent auxiliary camera captures
+DEFAULT_ANPR_CAMERA_URLS = [
+    "http://192.168.1.101/cgi-bin/snapshot.cgi",
+]
+DEFAULT_AUXILIARY_CAMERA_URLS = [
+    "http://192.168.1.102/cgi-bin/snapshot.cgi",
+    "http://192.168.1.103/cgi-bin/snapshot.cgi",
+    "http://192.168.1.104/cgi-bin/snapshot.cgi",
+]
 
 # ── Emergency Wi-Fi Hotspot Constants ─────────────────────────────────────────
 HOTSPOT_CON_NAME = "Gluvok-Hotspot"

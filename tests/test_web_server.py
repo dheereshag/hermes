@@ -26,6 +26,9 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.auth_token = res.get_json()["token"]
 
+    def tearDown(self):
+        config.load_settings()
+
     def test_get_index_html(self):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
@@ -100,6 +103,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertNotIn("device_id", data)
         self.assertNotIn("device_key", data)
         self.assertIn("center_id", data)
+        self.assertIn("anpr_camera_urls", data)
 
     def test_post_api_config_success(self):
         payload = {
@@ -124,6 +128,29 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.device_id, "pi1")
         self.assertEqual(config.device_key, "hardware123")
         self.assertEqual(config.center_id, 5)
+        self.assertEqual(config.anpr_camera_url, "http://192.168.1.150/snapshot")
+
+    def test_post_api_config_with_multiple_anpr_cameras(self):
+        payload = {
+            "min_weight": 70.0,
+            "anpr_camera_urls": [
+                "http://127.0.0.1:8999/front",
+                "http://127.0.0.1:8999/rear",
+            ],
+            "auxiliary_camera_urls": ["http://127.0.0.1:8999/overview"],
+        }
+        res = self.client.post(
+            "/api/config",
+            data=json.dumps(payload),
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(config.anpr_camera_urls), 2)
+        self.assertEqual(config.anpr_camera_urls[0], "http://127.0.0.1:8999/front")
+        self.assertEqual(config.anpr_camera_urls[1], "http://127.0.0.1:8999/rear")
+        self.assertEqual(config.anpr_camera_url, "http://127.0.0.1:8999/front")
+
 
 
     def test_post_api_config_unauthorized(self):
