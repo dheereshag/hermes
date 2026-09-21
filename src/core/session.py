@@ -62,6 +62,14 @@ class WeighbridgeSessionManager:
             if self.phase != SessionPhase.PHASE_IDLE:
                 return
 
+            # Ensure any lingering thread from previous session is stopped
+            if self._anpr_thread and self._anpr_thread.is_alive():
+                self._stop_anpr_event.set()
+                old_thread = self._anpr_thread
+                self._anpr_thread = None
+            else:
+                old_thread = None
+
             self.session_id = f"SESS_{int(time.time())}_{uuid.uuid4().hex[:6]}"
             self.phase = SessionPhase.PHASE_STABILIZING
             self.stable_weight = 0.0
@@ -69,17 +77,24 @@ class WeighbridgeSessionManager:
             self._cam1_plates.clear()
             self._cam1_statuses.clear()
             self._auxiliary_images.clear()
-            self._stop_anpr_event.clear()
+            self._stop_anpr_event = threading.Event()
 
             logger.info(f"[Session] Started new weighbridge session: {self.session_id}")
 
-            # Launch Camera 1 ANPR 2-second capture loop thread
+            current_session_id = self.session_id
+            current_stop_event = self._stop_anpr_event
+
+            # Launch Camera 1 ANPR 2-second capture loop thread bound to this session
             self._anpr_thread = threading.Thread(
                 target=self._anpr_loop,
+                args=(current_session_id, current_stop_event),
                 name=f"ANPRLoop_{self.session_id}",
                 daemon=True,
             )
             self._anpr_thread.start()
+
+        if old_thread and old_thread.is_alive():
+            old_thread.join(timeout=0.3)
 
     def _capture_and_record_anpr_sample(self) -> None:
         """Fetch one Camera 1 frame, buffer it, and record ANPR plate/status."""
@@ -98,21 +113,32 @@ class WeighbridgeSessionManager:
                 self._cam1_plates.append(plate)
             self._cam1_statuses.append(status_code)
 
-    def _anpr_loop(self):
+    def _anpr_loop(self, session_id: str, stop_event: threading.Event):
         """Background thread executing 2-second Camera 1 capture & ANPR requests."""
-        logger.info(f"[Session {self.session_id}] Camera 1 ANPR capture loop started.")
-        while not self._stop_anpr_event.is_set():
+        logger.info(f"[Session {session_id}] Camera 1 ANPR capture loop started.")
+        while not stop_event.is_set():
+            with self._lock:
+                if self.session_id != session_id or self.phase == SessionPhase.PHASE_IDLE:
+                    break
+
             loop_start = time.time()
             try:
                 self._capture_and_record_anpr_sample()
             except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
-                logger.error(f"[Session {self.session_id}] Exception in ANPR loop iteration: {e}")
+                logger.error(f"[Session {session_id}] Exception in ANPR loop iteration: {e}")
+
+            if stop_event.is_set():
+                break
+            with self._lock:
+                if self.session_id != session_id or self.phase == SessionPhase.PHASE_IDLE:
+                    break
 
             elapsed = time.time() - loop_start
             sleep_time = max(0.1, ANPR_CAPTURE_INTERVAL - elapsed)
-            time.sleep(sleep_time)
+            if stop_event.wait(timeout=sleep_time):
+                break
 
-        logger.info(f"[Session {self.session_id}] Camera 1 ANPR capture loop stopped.")
+        logger.info(f"[Session {session_id}] Camera 1 ANPR capture loop stopped.")
 
     def on_weight_stabilized(self, weight: float):
         """Called when scale stability machine confirms 10s weight stability."""
@@ -221,6 +247,9 @@ class WeighbridgeSessionManager:
 
             logger.info(f"[Session {self.session_id}] Weight zeroed. Resetting session manager.")
             self._stop_anpr_event.set()
+            old_anpr_thread = self._anpr_thread
+            self._anpr_thread = None
+            self._stop_anpr_event = threading.Event()
             self._aux_thread = None
             self.phase = SessionPhase.PHASE_IDLE
             self.session_id = None
@@ -229,6 +258,9 @@ class WeighbridgeSessionManager:
             self._cam1_plates.clear()
             self._cam1_statuses.clear()
             self._auxiliary_images.clear()
+
+        if old_anpr_thread and old_anpr_thread.is_alive():
+            old_anpr_thread.join(timeout=0.3)
 
 
 def _record_session_telemetry(
