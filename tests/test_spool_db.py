@@ -183,6 +183,32 @@ class TestSpoolDB(unittest.TestCase):
         self.assertEqual(files[0][1][1], b"sample_image_data")
         self.assertEqual(files[0][1][2], "image/jpeg")
 
+    @patch("src.integrations.gluvok.requests.post")
+    def test_transmit_entry_multipart_without_image_preserves_multipart(self, mock_post: Mock):
+        mock_resp = Mock(status_code=201, content=b'{"data": {"id": 106}}')
+        mock_resp.json.return_value = {"data": {"id": 106}}
+        mock_post.return_value = mock_resp
+
+        success, entry_id, _err, is_timeout = transmit_entry_multipart(
+            center_id=1,
+            detected_vehicle_number="NO_PLATE_DETECTED",
+            weight=380.0,
+            image_bytes=None,
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(entry_id, "106")
+        self.assertFalse(is_timeout)
+
+        call_kwargs = mock_post.call_args.kwargs
+        # Check that files is present so requests sets multipart/form-data
+        files = call_kwargs["files"]
+        self.assertIsNotNone(files)
+        self.assertEqual(files[0][0], "file")
+        self.assertEqual(files[0][1][1], b"")
+        # Check that plate is sanitized to Indian plate format
+        self.assertEqual(call_kwargs["data"]["detected_vehicle_number"], "MH00XX0000")
+
     @patch("src.integrations.gluvok.requests.get")
     def test_verify_entry_in_cloud_matches_tolerance(self, mock_get: Mock):
         mock_resp = Mock(status_code=200)

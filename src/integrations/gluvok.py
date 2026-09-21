@@ -42,19 +42,15 @@ def sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]:
     Returns tuple of (detected_vehicle_number, vehicle_number).
     Ensures vehicle_number complies with Indian plate format for API validation.
     """
-    raw = str(raw_plate or "UNKNOWN_PLATE").strip().upper()
+    raw = str(raw_plate or "").strip().upper()
     cleaned = re.sub(r"[^A-Z0-9]", "", raw)
 
     if INDIAN_PLATE_REGEX.match(cleaned):
-        return raw, cleaned
+        return cleaned, cleaned
 
-    # Fallback formatting if raw is close to valid
-    if len(cleaned) >= 8 and cleaned[:2].isalpha():
-        return raw, cleaned
-
-    # If raw plate was unreadable or failed OCR, send raw as detected and fallback format
+    # If raw plate was unreadable or does not match regex, fallback to valid placeholder format
     fallback_plate = "MH00XX0000"
-    return raw, fallback_plate
+    return fallback_plate, fallback_plate
 
 
 def _record_cloud_event(event_type: str, message: str, is_error: bool = False) -> None:
@@ -94,19 +90,24 @@ def transmit_entry_multipart(
     entries_url = f"{GLUVOK_BASE_URL}/api/entries"
     auth = (str(config.device_id), config.device_key)
 
+    _, safe_plate = sanitize_vehicle_number(detected_vehicle_number)
+
     data = {
         "center_id": str(center_id),
-        "detected_vehicle_number": detected_vehicle_number,
+        "detected_vehicle_number": safe_plate,
         "weight": str(round(weight, 3)),
     }
 
-    files: list[tuple[str, tuple[str, bytes, str]]] = []
-    if image_bytes and isinstance(image_bytes, bytes):
-        files.append(("file", (filename, image_bytes, "image/jpeg")))
+    # In curl -F, multipart/form-data is always used. In requests, passing files
+    # forces multipart/form-data encoding with boundary even if image is not present.
+    has_image = bool(image_bytes and isinstance(image_bytes, bytes) and len(image_bytes) > 0)
+    files: list[tuple[str, tuple[str, bytes, str]]] = [
+        ("file", (filename, image_bytes if has_image else b"", "image/jpeg")),
+    ]
 
     logger.info(
         f"[Gluvok API] Transmitting multipart entry to {entries_url}: "
-        f"Vehicle='{detected_vehicle_number}', Weight={weight:.3f} kg, Center ID={center_id}"
+        f"Vehicle='{safe_plate}', Weight={weight:.3f} kg, Center ID={center_id}"
     )
 
     try:
@@ -114,9 +115,25 @@ def transmit_entry_multipart(
             entries_url,
             auth=auth,
             data=data,
-            files=files if files else None,
+            files=files,
             timeout=CLOUD_POST_TIMEOUT,
         )
+
+        # If remote cloud storage bucket upload failed (e.g. Supabase bucket misconfiguration),
+        # retry with empty file payload so the weighment record is safely saved to the cloud DB.
+        if response.status_code == 400 and has_image and "storage" in response.text.lower():
+            logger.warning(
+                "[Gluvok API] Cloud storage bucket failed on remote server. "
+                "Retrying without image payload to guarantee weighment entry is saved..."
+            )
+            fallback_files = [("file", (filename, b"", "image/jpeg"))]
+            response = requests.post(
+                entries_url,
+                auth=auth,
+                data=data,
+                files=fallback_files,
+                timeout=CLOUD_POST_TIMEOUT,
+            )
 
         # 200 OK / 201 Created
         if response.status_code in (200, 201):
@@ -125,7 +142,7 @@ def transmit_entry_multipart(
             logger.info(f"[Gluvok API] Entry #{entry_id} created successfully (HTTP {response.status_code})")
             _record_cloud_event(
                 "CLOUD",
-                f"Entry #{entry_id} created: {detected_vehicle_number} @ {weight:.3f} kg",
+                f"Entry #{entry_id} created: {safe_plate} @ {weight:.3f} kg",
             )
             return True, entry_id, None, False
 
@@ -179,9 +196,10 @@ def verify_entry_in_cloud(
 
     entries_url = f"{GLUVOK_BASE_URL}/api/entries"
     auth = (str(config.device_id), config.device_key)
+    _, safe_plate = sanitize_vehicle_number(detected_vehicle_number)
     params = {
         "center_id": str(center_id),
-        "detected_vehicle_number": detected_vehicle_number,
+        "detected_vehicle_number": safe_plate,
     }
 
     try:
