@@ -118,10 +118,12 @@ def _parse_anpr_response(response: requests.Response) -> tuple[str | None, str]:
         try:
             data = response.json()
             if isinstance(data, dict):
+                logger.info(f"[Argus Response]\n{json.dumps(data, indent=2)}")
                 plate, status = _extract_plate_from_dict(data)
                 if status is not None:
                     return plate, status
             elif isinstance(data, str) and data.strip():
+                logger.info(f"[Argus Response] '{data.strip()}'")
                 return data.strip().upper(), "SUCCESS"
         except (ValueError, KeyError, json.JSONDecodeError, TypeError) as parse_err:
             text = response.text.strip().upper()
