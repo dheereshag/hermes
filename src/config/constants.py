@@ -24,7 +24,7 @@ DEFAULT_WEIGHT_THRESHOLD = 50.0 # Minimum weight threshold in kg to start a sess
 ANPR_CAPTURE_INTERVAL = 2.0     # Seconds between Camera ANPR capture attempts
 POST_STABILITY_DURATION = 10.0   # Seconds to capture ANPR after stability confirmed
 CAMERA_TIMEOUT = 3.0            # Seconds allowed for individual camera HTTP snapshot
-ANPR_SERVER_TIMEOUT = 15.0      # Seconds allowed for Argus ANPR HTTP POST
+ANPR_SERVER_TIMEOUT = 30.0      # Seconds allowed for Argus ANPR HTTP POST (accommodates Raspberry Pi CPU inference)
 MAX_PARALLEL_CAMERA_WORKERS = 4 # Thread pool workers for concurrent auxiliary camera captures
 DEFAULT_ANPR_CAMERA_URLS = [
     "http://192.168.1.101/cgi-bin/snapshot.cgi",
