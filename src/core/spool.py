@@ -8,6 +8,7 @@ to Gluvok Cloud API with anti-duplication verification, exponential backoff, and
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 from typing import Any
 
@@ -77,30 +78,63 @@ class SpoolWorker:
         """Wakes up worker immediately when a new weighment is spooled."""
         self._wake_event.set()
 
+    def _extract_task_images(self, session_id: str) -> list[tuple[str, bytes]]:
+        """Retrieves and validates all stored camera image blobs for this session."""
+        images = get_spool_images(session_id)
+        return [
+            (filename, data)
+            for _, filename, data in images
+            if data and isinstance(data, bytes) and len(data) > 0
+        ]
+
+    def _handle_transmission_outcome(
+        self,
+        session_id: str,
+        center_id: int,
+        vehicle_num: str,
+        weight: float,
+        success: bool,
+        entry_id: str | None,
+        error_msg: str | None,
+        is_read_timeout: bool,
+    ) -> None:
+        """Processes upload response, anti-duplication pre-retry check, and backoff queueing."""
+        if success:
+            mark_spool_acknowledged(session_id, entry_id)
+            record_system_event("SPOOL", f"Session {session_id} uploaded to cloud -> Entry #{entry_id}")
+            return
+
+        # Handle ambiguous ReadTimeout: Did cloud receive and commit before the connection dropped?
+        if is_read_timeout:
+            from src.integrations.gluvok import verify_entry_in_cloud
+
+            logger.info(
+                f"[SpoolWorker] Ambiguous read timeout for {session_id}. Executing pre-retry verification query..."
+            )
+            verified_entry_id = verify_entry_in_cloud(center_id, vehicle_num, weight)
+            if verified_entry_id:
+                mark_spool_acknowledged(session_id, verified_entry_id)
+                record_system_event(
+                    "SPOOL",
+                    f"Session {session_id} verified in cloud as #{verified_entry_id}. Duplicate avoided.",
+                )
+                return
+
+        # Terminal client errors (400 Bad Request, 422 Unprocessable Entity)
+        is_terminal = bool(error_msg and ("HTTP 400" in error_msg or "HTTP 422" in error_msg))
+        mark_spool_retry(session_id, error_msg or "Unknown transmission error", is_terminal=is_terminal)
+        record_system_event("SPOOL", f"Session {session_id} delivery failed: {error_msg}. Queued for retry.")
+
     def _process_single_task(self, task: dict[str, Any]) -> bool:
-        """
-        Executes transmission of a leased weighment task.
-        Returns True if a task was processed.
-        """
-        from src.integrations.gluvok import (
-            transmit_entry_multipart,
-            verify_entry_in_cloud,
-        )
+        """Executes transmission of a leased weighment task."""
+        from src.integrations.gluvok import transmit_entry_multipart
 
         session_id = str(task["session_id"])
         center_id = int(task["center_id"])
         vehicle_num = str(task["detected_vehicle_number"])
         weight = float(task["weight"])
 
-
-        # Fetch all camera images for this session from DB
-        images = get_spool_images(session_id)
-        image_attachments = [
-            (filename, data)
-            for _, filename, data in images
-            if data and isinstance(data, bytes) and len(data) > 0
-        ]
-
+        image_attachments = self._extract_task_images(session_id)
         logger.info(
             f"[SpoolWorker] Dispatching leased session {session_id} to cloud with "
             f"{len(image_attachments)} camera image(s)..."
@@ -113,66 +147,39 @@ class SpoolWorker:
             images=image_attachments,
         )
 
-        if success:
-            mark_spool_acknowledged(session_id, entry_id)
-            record_system_event(
-                "SPOOL",
-                f"Session {session_id} uploaded to cloud -> Entry #{entry_id}",
-            )
-            return True
-
-        # Handle ambiguous ReadTimeout: Did cloud receive and commit before the connection dropped?
-        if is_read_timeout:
-            logger.info(
-                f"[SpoolWorker] Ambiguous read timeout for {session_id}. "
-                f"Executing pre-retry verification query..."
-            )
-            verified_entry_id = verify_entry_in_cloud(center_id, vehicle_num, weight)
-            if verified_entry_id:
-                mark_spool_acknowledged(session_id, verified_entry_id)
-                record_system_event(
-                    "SPOOL",
-                    f"Session {session_id} verified in cloud as #{verified_entry_id}. Duplicate avoided.",
-                )
-                return True
-
-        # Determine if terminal failure (e.g. 400 Bad Request)
-        is_terminal = bool(error_msg and "HTTP 400" in error_msg)
-        mark_spool_retry(session_id, error_msg or "Unknown transmission error", is_terminal=is_terminal)
-        record_system_event(
-            "SPOOL",
-            f"Session {session_id} delivery failed: {error_msg}. Queued for retry.",
+        self._handle_transmission_outcome(
+            session_id=session_id,
+            center_id=center_id,
+            vehicle_num=vehicle_num,
+            weight=weight,
+            success=success,
+            entry_id=entry_id,
+            error_msg=error_msg,
+            is_read_timeout=is_read_timeout,
         )
         return True
 
     def _run_loop(self) -> None:
         """Main dispatcher loop running until stopped."""
-        # Initial recovery of any stranded tasks
-        import sqlite3
-
         try:
-            recover_stranded_leases()
+            recover_stranded_leases(force=True)
         except (sqlite3.Error, OSError) as e:
             logger.error(f"[SpoolWorker] Error during initial lease recovery: {e}")
 
         while not self._stop_event.is_set():
             try:
-                # Keep processing eligible records in FIFO order
-                task_processed = False
+                # Reclaim any expired leases periodically
+                recover_stranded_leases(force=False)
+
+                # Process all available tasks in FIFO order
                 while not self._stop_event.is_set():
                     task = acquire_next_spool_task(lease_seconds=SPOOL_LEASE_DURATION_S)
                     if not task:
                         break
                     self._process_single_task(task)
-                    task_processed = True
-
-                # If we processed tasks, reset wake event and take a short pause
-                if task_processed:
-                    self._wake_event.clear()
 
             except (sqlite3.Error, OSError, ValueError, RuntimeError):
                 logger.exception("[SpoolWorker] Unexpected error in worker loop")
-
 
             # Sleep until timeout or wake event
             self._wake_event.wait(timeout=self.poll_interval)

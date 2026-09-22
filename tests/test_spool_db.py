@@ -142,6 +142,24 @@ class TestSpoolDB(unittest.TestCase):
         self.assertEqual(stats["pending"], 1)
         self.assertEqual(stats["uploading"], 0)
 
+    def test_recover_stranded_leases_forced(self):
+        pkg = {"session_id": "SESS_STRANDED_002", "weight": 9000.0, "anpr_plate": "MH01AA0004"}
+        spool_weighment(pkg)
+        # Acquire with long future lease (600 seconds)
+        acquire_next_spool_task(lease_seconds=600.0)
+
+        # Standard recovery shouldn't recover future lease
+        recovered_standard = recover_stranded_leases(force=False)
+        self.assertEqual(recovered_standard, 0)
+
+        # Forced boot recovery should immediately reclaim it to PENDING
+        recovered_forced = recover_stranded_leases(force=True)
+        self.assertEqual(recovered_forced, 1)
+
+        stats = get_spool_stats()
+        self.assertEqual(stats["pending"], 1)
+        self.assertEqual(stats["uploading"], 0)
+
     @patch("src.integrations.gluvok.requests.post")
     def test_transmit_entry_multipart_curl_format(self, mock_post: Mock):
         mock_resp = Mock(status_code=201, content=b'{"data": {"id": 105}}')
