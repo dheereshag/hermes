@@ -311,7 +311,7 @@ Argus ANPR microservice client and consensus voting algorithm.
 - **`resolve_anpr_endpoint(url: str | None = None) -> str`**:
   Sanitizes ANPR URL, normalizes `0.0.0.0` to `127.0.0.1`, and appends `/recognize` if omitted.
 - **`_extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]`**:
-  Parses Argus JSON response. Extracts license plate string from `results[].plate` or flat keys (`number_plate`, `plate`). Detects pre-screening rejections:
+  Parses Argus JSON response. Evaluates `results[]` sequentially from index 0 without sorting. Selects the first valid, non-null plate encountered. If index 0 is invalid/null, advances sequentially to index 1, 2, etc. If no valid plate exists across all items, returns `(None, "NO_PLATE_DETECTED")`. Detects pre-screening rejections:
   - `REJECTED_HUMAN_DETECTED`: Safety policy rejected frame due to person standing on platform.
   - `NO_PLATE_DETECTED`: Frame readable but no plate characters recognized.
 - **`_parse_anpr_response(response: requests.Response) -> tuple[str | None, str]`**:
