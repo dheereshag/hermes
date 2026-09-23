@@ -128,6 +128,113 @@ class TestANPRClient(unittest.TestCase):
         self.assertIsNone(plate)
         self.assertEqual(status, "ANPR_CONNECTION_ERROR")
 
+    @patch("src.integrations.anpr.requests.post")
+    def test_send_frame_argus_multi_vehicle_picks_first(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "filename": "4.jpg",
+            "humans_outside": 0,
+            "humans_inside": 0,
+            "results": [
+                {
+                    "plate": "RJ43GA2012",
+                    "vehicle_type": "truck",
+                    "state": "Rajasthan",
+                    "raw_text": "m RJ43GA2012 SUPER FAST",
+                    "confidence": 0.9993,
+                    "box": [512, 387, 575, 409],
+                },
+                {
+                    "plate": "RJ43GA2012",
+                    "vehicle_type": "truck",
+                    "state": "Rajasthan",
+                    "raw_text": "TATA RJ436A.2012",
+                    "confidence": 0.8568,
+                    "box": [131, 400, 207, 423],
+                },
+            ],
+            "execution_time_ms": 1915.68,
+        }
+        mock_post.return_value = mock_response
+
+        plate, status = send_frame_to_anpr_server(b"fake-bytes")
+        self.assertEqual(plate, "RJ43GA2012")
+        self.assertEqual(status, "SUCCESS")
+
+    @patch("src.integrations.anpr.requests.post")
+    def test_send_frame_argus_multi_vehicle_different_plates(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "filename": "multi.jpg",
+            "humans_outside": 0,
+            "humans_inside": 0,
+            "results": [
+                {
+                    "plate": "RJ43GA2012",
+                    "vehicle_type": "truck",
+                    "confidence": 0.99,
+                },
+                {
+                    "plate": "DL01AB9999",
+                    "vehicle_type": "car",
+                    "confidence": 0.95,
+                },
+            ],
+            "execution_time_ms": 1500.0,
+        }
+        mock_post.return_value = mock_response
+
+        plate, status = send_frame_to_anpr_server(b"fake-bytes")
+        # Primary vehicle (first in results array) must be selected
+        self.assertEqual(plate, "RJ43GA2012")
+        self.assertEqual(status, "SUCCESS")
+
+    @patch("src.integrations.anpr.requests.post")
+    def test_send_frame_argus_multi_vehicle_first_empty_plate(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "filename": "multi_unreadable.jpg",
+            "results": [
+                {
+                    "plate": None,
+                    "vehicle_type": "truck",
+                    "confidence": 0.30,
+                },
+                {
+                    "plate": "DL01AB9999",
+                    "vehicle_type": "car",
+                    "confidence": 0.95,
+                },
+            ],
+            "execution_time_ms": 1200.0,
+        }
+        mock_post.return_value = mock_response
+
+        plate, status = send_frame_to_anpr_server(b"fake-bytes")
+        # First vehicle has no plate; background vehicle must not be picked
+        self.assertIsNone(plate)
+        self.assertEqual(status, "NO_PLATE_DETECTED")
+
+    @patch("src.integrations.anpr.requests.post")
+    def test_send_frame_argus_empty_results_no_status_key(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "filename": "empty.jpg",
+            "humans_outside": 0,
+            "humans_inside": 0,
+            "results": [],
+            "execution_time_ms": 1100.0,
+        }
+        mock_post.return_value = mock_response
+
+        plate, status = send_frame_to_anpr_server(b"fake-bytes")
+        self.assertIsNone(plate)
+        self.assertEqual(status, "NO_PLATE_DETECTED")
+
     def test_highest_frequency_voting(self):
         samples = ["MH12AB1234", "MH12AB1234", "MH12AB1234", "MH12AB1235", "DL01AB9999"]
         winner = get_highest_frequency_plate(samples)

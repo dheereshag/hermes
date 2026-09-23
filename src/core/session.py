@@ -112,10 +112,12 @@ class WeighbridgeSessionManager:
         """Fetch frames from all configured ANPR cameras in parallel, buffer them, and query Argus."""
         snapshots = capture_anpr_snapshots()
         if not snapshots:
+            logger.warning("[ANPR] No ANPR cameras available or configured.")
             return
 
         for cam_idx, _cam_url, img_bytes in snapshots:
             if not img_bytes:
+                logger.warning(f"[ANPR] Camera {cam_idx} frame capture failed from {_cam_url}")
                 continue
 
             with self._lock:
@@ -126,11 +128,23 @@ class WeighbridgeSessionManager:
                 else:
                     self._secondary_anpr_images[cam_idx] = img_bytes
 
+            logger.info(f"[ANPR] Camera {cam_idx} snapshot captured ({len(img_bytes)} bytes). Sending to Argus...")
             plate, status_code = send_frame_to_anpr_server(img_bytes)
             with self._lock:
                 if plate:
                     self._cam1_plates.append(plate)
                 self._cam1_statuses.append(status_code)
+                sample_count = len(self._cam1_plates)
+
+            if plate:
+                logger.info(
+                    f"[ANPR] Camera {cam_idx} -> Argus response: Plate='{plate}' "
+                    f"(Status={status_code}, Valid plates collected: {sample_count})"
+                )
+            else:
+                logger.info(
+                    f"[ANPR] Camera {cam_idx} -> Argus response: No plate detected (Status={status_code})"
+                )
 
     def _anpr_loop(self, session_id: str, stop_event: threading.Event):
         """Background thread executing 2-second Camera 1 capture & ANPR requests."""

@@ -308,24 +308,35 @@ def mark_spool_retry(
         conn.commit()
 
 
-def recover_stranded_leases() -> int:
+def recover_stranded_leases(force: bool = False) -> int:
     """
     Recovers any tasks stranded in UPLOADING due to unexpected power outage or crash.
     Safely resets them to PENDING so they can be dispatched.
+    If force is True, resets all UPLOADING tasks regardless of lease_until (used on daemon boot).
     """
     now = time.time()
     with _db_lock, _get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE weighment_spool
-            SET status = 'PENDING',
-                lease_until = 0.0
-            WHERE status = 'UPLOADING'
-              AND lease_until < ?;
-            """,
-            (now,),
-        )
+        if force:
+            cursor.execute(
+                """
+                UPDATE weighment_spool
+                SET status = 'PENDING',
+                    lease_until = 0.0
+                WHERE status = 'UPLOADING';
+                """
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE weighment_spool
+                SET status = 'PENDING',
+                    lease_until = 0.0
+                WHERE status = 'UPLOADING'
+                  AND lease_until < ?;
+                """,
+                (now,),
+            )
         count = cursor.rowcount
         conn.commit()
         if count > 0:

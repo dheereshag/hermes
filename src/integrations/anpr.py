@@ -40,26 +40,39 @@ def _normalize_plate_value(plate_val: object) -> str | None:
     return plate_clean
 
 
-def _plate_from_results_list(data: dict) -> tuple[str, str] | None:
-    """Extract plate from Argus `results[].plate` list if present."""
-    results = data.get("results")
-    if not isinstance(results, list):
+def _plate_from_results_list(data: dict) -> tuple[str | None, str] | None:
+    """Extract plate from Argus `results[]` list.
+
+    If multiple vehicles are detected, the first vehicle (results[0]) is strictly considered.
+    Returns (plate, "SUCCESS"), (None, "NO_PLATE_DETECTED"), or None if 'results' not in data.
+    """
+    if "results" not in data:
         return None
-    for item in results:
-        if not isinstance(item, dict):
-            continue
-        plate_clean = _normalize_plate_value(item.get("plate"))
-        if not plate_clean:
-            continue
-        exec_time = data.get("execution_time_ms", "N/A")
-        provider = data.get("provider", "unknown")
-        vtype = data.get("vehicle_type") or "vehicle"
-        logger.info(
-            f"[ANPR] Argus recognized plate: '{plate_clean}' "
-            f"({vtype}, provider={provider}, {exec_time}ms)"
-        )
-        return plate_clean, "SUCCESS"
-    return None
+
+    results = data.get("results")
+    if not isinstance(results, list) or len(results) == 0:
+        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
+
+    first_item = results[0]
+    if not isinstance(first_item, dict):
+        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
+
+    plate_clean = _normalize_plate_value(first_item.get("plate"))
+    if not plate_clean:
+        logger.info("[ANPR] Primary vehicle (first in array) has no readable plate.")
+        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
+
+    exec_time = data.get("execution_time_ms", "N/A")
+    vtype = first_item.get("vehicle_type") or "vehicle"
+    conf = first_item.get("confidence")
+    conf_str = f", conf={conf:.4f}" if isinstance(conf, (int, float)) else ""
+    multi_info = f" [selected vehicle 1 of {len(results)}]" if len(results) > 1 else ""
+
+    logger.info(
+        f"[ANPR] Argus recognized primary plate: '{plate_clean}' "
+        f"({vtype}{conf_str}, {exec_time}ms{multi_info})"
+    )
+    return plate_clean, "SUCCESS"
 
 
 def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:
@@ -74,6 +87,17 @@ def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:
 
 def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
     """Extract plate string or status code from Argus / generic JSON response."""
+    raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
+    if data.get("rejected"):
+        status_msg = data.get("status_message", "Pre-screening rejected frame")
+        logger.info(f"[ANPR] Argus pre-screening rejected frame: {status_msg} (status: {raw_status})")
+        return None, raw_status
+
+    if data.get("success") is False and not data.get("results"):
+        status_msg = data.get("status_message", "No plate detected")
+        logger.info(f"[ANPR] Argus reported: {status_msg} (status: {raw_status})")
+        return None, raw_status
+
     from_results = _plate_from_results_list(data)
     if from_results is not None:
         return from_results
@@ -82,21 +106,10 @@ def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
     if from_flat is not None:
         return from_flat
 
-    raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
-    if data.get("rejected"):
-        status_msg = data.get("status_message", "Pre-screening rejected frame")
-        logger.info(f"[ANPR] Argus pre-screening rejected frame: {status_msg} (status: {raw_status})")
-        return None, raw_status
-
-    if data.get("success") is False:
-        status_msg = data.get("status_message", "No plate detected")
-        logger.info(f"[ANPR] Argus reported: {status_msg} (status: {raw_status})")
-        return None, raw_status
-
     if "status" in data:
         return None, raw_status
 
-    return None, None
+    return None, "NO_PLATE_DETECTED"
 
 
 def _parse_anpr_response(response: requests.Response) -> tuple[str | None, str]:
@@ -105,10 +118,12 @@ def _parse_anpr_response(response: requests.Response) -> tuple[str | None, str]:
         try:
             data = response.json()
             if isinstance(data, dict):
+                logger.info(f"[Argus Response]\n{json.dumps(data, indent=2)}")
                 plate, status = _extract_plate_from_dict(data)
                 if status is not None:
                     return plate, status
             elif isinstance(data, str) and data.strip():
+                logger.info(f"[Argus Response] '{data.strip()}'")
                 return data.strip().upper(), "SUCCESS"
         except (ValueError, KeyError, json.JSONDecodeError, TypeError) as parse_err:
             text = response.text.strip().upper()
