@@ -33,6 +33,7 @@ hermes/
 │   ├── [test_scale_uart.py](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py)     # Scale UART parser, framing, and silence flush tests
 │   ├── [test_session_fallback.py](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) # Weighbridge session error propagation tests
 │   ├── [test_cloud_post.py](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py)     # Gluvok API multipart and Basic Auth tests
+│   ├── [test_rgb_led.py](file:///Users/d/Downloads/hermes/tests/test_rgb_led.py)        # RGB LED state indicator driver & transitions tests
 │   ├── [test_spool_db.py](file:///Users/d/Downloads/hermes/tests/test_spool_db.py)       # SQLite WAL durable spool, atomic leasing & idempotency tests
 │   ├── [test_threading_isolation.py](file:///Users/d/Downloads/hermes/tests/test_threading_isolation.py) # Threading concurrency and non-blocking isolation tests
 │   ├── [test_web_server.py](file:///Users/d/Downloads/hermes/tests/test_web_server.py)     # Diagnostics web console & REST API tests
@@ -53,7 +54,8 @@ hermes/
     │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/devices/__init__.py)        # Subpackage exports
     │   ├── [scale.py](file:///Users/d/Downloads/hermes/src/devices/scale.py)              # UART serial stream reader & line buffer parser
     │   ├── [camera.py](file:///Users/d/Downloads/hermes/src/devices/camera.py)            # HTTP snapshot / RTSP frame grabber & parallel aux captures
-    │   └── [wifi.py](file:///Users/d/Downloads/hermes/src/devices/wifi.py)                # Automatic Wi-Fi watchdog & emergency hotspot monitor
+    │   ├── [wifi.py](file:///Users/d/Downloads/hermes/src/devices/wifi.py)                # Automatic Wi-Fi watchdog & emergency hotspot monitor
+    │   └── led/                                        # RGB LED GPIO driver & state machine (Green, Red, Blue)
     ├── integrations/
     │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/integrations/__init__.py)   # Subpackage exports
     │   ├── [anpr.py](file:///Users/d/Downloads/hermes/src/integrations/anpr.py)           # Argus ANPR server client & plate voting algorithm

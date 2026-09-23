@@ -34,13 +34,19 @@ from src.core import (
     session_manager,
     spool_worker,
 )
-from src.devices import get_uart_reader, start_wifi_watchdog, stop_wifi_watchdog
+from src.devices import (
+    get_uart_reader,
+    led_controller,
+    start_wifi_watchdog,
+    stop_wifi_watchdog,
+)
 from src.web import start_web_server, stop_web_server
 
 
 # ── Graceful shutdown ─────────────────────────────────────────────────────────
 def shutdown(signum, frame):
     logger.info("\n[Main] Shutdown signal received. Cleaning up...")
+    led_controller.cleanup()
     spool_worker.stop()
     get_uart_reader().stop()
     stop_web_server()
@@ -61,6 +67,9 @@ def setup():
     logger.info("==============================================")
     logger.info("Gluvok Weighment & ANPR System Starting...")
     logger.info("==============================================")
+
+    # Initialize RGB LED indicator to idle Green
+    led_controller.set_idle()
 
     # Start UART scale reader thread
     get_uart_reader().start()

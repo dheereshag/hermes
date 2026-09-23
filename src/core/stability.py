@@ -56,6 +56,8 @@ class ScaleStabilityMachine:
                 )
                 self._reset_candidate_state()
                 session_manager.reset_session()
+                from src.devices import led_controller
+                led_controller.set_idle()
             return True
 
         if parsed_weight < config.weight_threshold:
@@ -103,6 +105,8 @@ class ScaleStabilityMachine:
             self._current_stable_candidate = parsed_weight
             self._candidate_start_time = now
             session_manager.start_session()
+            from src.devices import led_controller
+            led_controller.set_active()
             return
 
         self._evaluate_stability_window(parsed_weight, now)
@@ -126,6 +130,8 @@ class ScaleStabilityMachine:
         self._candidate_start_time = 0.0
         self._last_printed_weight = -9999.0
         session_manager.reset_session()
+        from src.devices import led_controller
+        led_controller.set_idle()
 
 
 # Module-level singleton
