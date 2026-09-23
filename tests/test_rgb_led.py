@@ -15,15 +15,15 @@ from src.devices.led.driver import LEDHardwareDriver
 class TestLEDHardwareDriver(unittest.TestCase):
     def test_driver_initialization_and_color_setting(self):
         driver = LEDHardwareDriver(red_pin=17, green_pin=27, blue_pin=22, active_high=False)
-        self.assertIsNotNone(driver._led)
+        self.assertTrue(driver.is_mock or len(driver.pins) == 3)
         driver.set_rgb(1, 0, 0)
-        self.assertEqual(driver._led.color, (1.0, 0.0, 0.0))
+        self.assertEqual(driver.current_values, (1, 0, 0))
         driver.set_rgb(0, 1, 0)
-        self.assertEqual(driver._led.color, (0.0, 1.0, 0.0))
+        self.assertEqual(driver.current_values, (0, 1, 0))
         driver.set_rgb(0, 0, 1)
-        self.assertEqual(driver._led.color, (0.0, 0.0, 1.0))
+        self.assertEqual(driver.current_values, (0, 0, 1))
         driver.close()
-        self.assertIsNone(driver._led)
+        self.assertEqual(len(driver.pins), 0)
 
 
 class TestRGBLedController(unittest.TestCase):

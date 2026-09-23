@@ -118,7 +118,7 @@ Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv
 - `pyserial`: Cross-platform RS-232/UART communications.
 - `requests`: HTTP client for Argus ANPR and Gluvok Cloud API.
 - `flask`: Application factory and REST API for local diagnostics.
-- `gpiozero`: Raspberry Pi GPIO control for RGB LED state indicator.
+- `python-periphery`: Pure-Python Linux GPIO/cdev control for RGB LED state indicator.
 - `pytest`, `ruff`, `ty`: Development verification gates.
 
 ---
@@ -297,7 +297,7 @@ RGB LED hardware driver and operational state indicator on Raspberry Pi GPIO.
   - 🔵 **Blue (Cloud Transfer Success)**: Triggered for 10 seconds upon verified weighment transmission to Gluvok Cloud.
 - **Classes & Modules**:
   - **`colors.py`**: `LEDColor` enum (`OFF`, `GREEN`, `RED`, `BLUE`).
-  - **`driver.py` (`LEDHardwareDriver`)**: Controls GPIO pins using `gpiozero.RGBLED(pwm=False)` with automatic mock fallback on non-Pi platforms.
+  - **`driver.py` (`LEDHardwareDriver`)**: Controls GPIO pins using `python-periphery` (pure-Python Linux `/dev/gpiochip*` / sysfs) with automatic mock fallback on non-Pi platforms.
   - **`controller.py` (`RGBLedController`)**: High-level state manager coordinating Green (idle), Red (active session), and 10s Blue (cloud success) transitions.
 - **Global**: `led_controller = RGBLedController()` (Singleton exported via `src.devices`).
 
