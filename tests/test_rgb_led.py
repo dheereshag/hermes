@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from src.core.stability import ScaleStabilityMachine
 from src.devices.led.colors import LEDColor
@@ -38,6 +38,17 @@ class TestRGBLedController(unittest.TestCase):
         self.controller.set_idle()
         self.assertEqual(self.controller.current_color, LEDColor.GREEN)
         self.mock_driver.set_rgb.assert_called_with(0, 1, 0)
+
+    def test_startup_test_cycles_green_red_blue_then_idle(self):
+        self.controller.startup_test(delay=0.01)
+        expected_calls = [
+            call(0, 1, 0),
+            call(1, 0, 0),
+            call(0, 0, 1),
+            call(0, 1, 0),
+        ]
+        self.mock_driver.set_rgb.assert_has_calls(expected_calls)
+        self.assertEqual(self.controller.current_color, LEDColor.GREEN)
 
     def test_active_sets_red(self):
         self.controller.set_active()

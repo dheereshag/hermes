@@ -68,8 +68,8 @@ def setup():
     logger.info("Gluvok Weighment & ANPR System Starting...")
     logger.info("==============================================")
 
-    # Initialize RGB LED indicator to idle Green
-    led_controller.set_idle()
+    # Initialize RGB LED indicator: Green (1s) -> Red (1s) -> Blue (1s) -> Idle Green
+    led_controller.startup_test(delay=1.0)
 
     # Start UART scale reader thread
     get_uart_reader().start()

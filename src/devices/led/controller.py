@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from src.devices.led.colors import LEDColor
 from src.devices.led.driver import LEDHardwareDriver
@@ -29,6 +30,15 @@ class RGBLedController:
         self._current_color = color
         self.driver.set_rgb(*color.value)
         logger.info(f"[LED] State changed to {color.name}")
+
+    def startup_test(self, delay: float = 1.0) -> None:
+        """Cycles Green -> Red -> Blue (delay seconds each), then resets to idle Green."""
+        logger.info(f"[LED] Starting hardware sequence: Green -> Red -> Blue ({delay}s each)...")
+        for color in (LEDColor.GREEN, LEDColor.RED, LEDColor.BLUE):
+            with self._lock:
+                self._apply_color(color)
+            time.sleep(delay)
+        self.set_idle()
 
     def set_idle(self) -> None:
         """Sets LED to Green when scale returns to zero."""
