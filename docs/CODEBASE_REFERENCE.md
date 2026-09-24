@@ -292,13 +292,13 @@ RGB LED hardware driver and operational state indicator on Raspberry Pi GPIO.
 
 - **Pins & Polarity**: GPIO 17 (Red), GPIO 27 (Green), GPIO 22 (Blue), Common Anode (`active_high=False`).
 - **States & Visual Indicators**:
-  - 🟢 **Green (Idle)**: Scale idle and ready for next vehicle.
-  - 🔴 **Red (Active Session)**: First weight encountered above threshold; remains Red while vehicle is on the platform until weight returns to zero.
-  - 🔵 **Blue (Cloud Transfer Success)**: Triggered for 10 seconds upon verified weighment transmission to Gluvok Cloud.
+  - 🟢 **Green (Idle / Completed)**: Scale idle and ready for next vehicle; also turns Green after cloud success to signal completion even if the vehicle is still on the platform.
+  - 🔴 **Red (Active Session)**: First weight encountered above threshold; indicates weighment / capture is in progress.
+  - 🔵 **Blue (Cloud Transfer Success)**: Triggered for 10 seconds upon verified weighment transmission to Gluvok Cloud, then transitions to Green.
 - **Classes & Modules**:
   - **`colors.py`**: `LEDColor` enum (`OFF`, `GREEN`, `RED`, `BLUE`).
   - **`driver.py` (`LEDHardwareDriver`)**: Controls GPIO pins using `python-periphery` (pure-Python Linux `/dev/gpiochip*` / sysfs) with automatic mock fallback on non-Pi platforms.
-  - **`controller.py` (`RGBLedController`)**: High-level state manager coordinating Green (idle), Red (active session), and 10s Blue (cloud success) transitions.
+  - **`controller.py` (`RGBLedController`)**: High-level state manager coordinating Green (idle/done), Red (active session), and 10s Blue (cloud success) transitions.
 - **Global**: `led_controller = RGBLedController()` (Singleton exported via `src.devices`).
 
 ---

@@ -59,6 +59,7 @@ class RGBLedController:
     def trigger_cloud_success(self, duration: float = 10.0) -> None:
         """Turns LED Blue for duration (seconds) after cloud upload success."""
         with self._lock:
+            self._is_active_session = False
             if self._timer is not None:
                 self._timer.cancel()
             self._apply_color(LEDColor.BLUE)
@@ -69,7 +70,8 @@ class RGBLedController:
     def _on_success_timeout(self) -> None:
         with self._lock:
             self._timer = None
-            self._apply_color(LEDColor.RED if self._is_active_session else LEDColor.GREEN)
+            self._is_active_session = False
+            self._apply_color(LEDColor.GREEN)
 
     def cleanup(self) -> None:
         """Cancels timers and turns off LED."""

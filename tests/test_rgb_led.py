@@ -65,14 +65,14 @@ class TestRGBLedController(unittest.TestCase):
         self.assertEqual(self.controller.current_color, LEDColor.GREEN)
         self.mock_driver.set_rgb.assert_called_with(0, 1, 0)
 
-    def test_cloud_success_reverts_to_red_when_session_still_active(self):
+    def test_cloud_success_reverts_to_green_when_weight_remains_on_scale(self):
         self.controller.set_active()
         self.controller.trigger_cloud_success(duration=0.05)
         self.assertEqual(self.controller.current_color, LEDColor.BLUE)
 
         time.sleep(0.1)
-        self.assertEqual(self.controller.current_color, LEDColor.RED)
-        self.mock_driver.set_rgb.assert_called_with(1, 0, 0)
+        self.assertEqual(self.controller.current_color, LEDColor.GREEN)
+        self.mock_driver.set_rgb.assert_called_with(0, 1, 0)
 
     def test_new_weight_cancels_blue_timer_immediately(self):
         self.controller.trigger_cloud_success(duration=1.0)
