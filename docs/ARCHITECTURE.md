@@ -300,26 +300,25 @@ Single SpoolWorker (FIFO Sequential Processing)
 
 ## 9. Binary Compilation & Asymmetric Ed25519 Client Licensing Architecture
 
-To protect intellectual property, eliminate field compilation, and prevent client credential tampering, Hermes uses a **build-once, deploy-everywhere** release model combined with **Ed25519 digital signatures (RFC 8032)**:
+To protect intellectual property and eliminate source code exposure, Hermes compiles Python into native C machine code with Nuitka and uses **Ed25519 digital signatures (RFC 8032)** for licensing:
 
 ```
-Developer / Build Machine
-       ├── 1. Compile Generic Binary ONCE: uv run python scripts/package.py
-       │      └── Generates: dist/hermes-release.tar.gz (0 .py files, 0 .git)
-       └── 2. Generate Client License: uv run python scripts/keygen.py ...
-              └── Generates: client.lic (Payload + Ed25519 digital signature)
-
-Raspberry Pi Field Deployment (< 5 Seconds)
-       ├── 1. Extract dist/hermes-release.tar.gz to /opt/hermes
-       ├── 2. Place client.lic into /opt/hermes/data/client.lic
-       └── 3. Start Hermes: /opt/hermes/hermes.sh (or via systemd)
+Developer / Mac Machine
+       ├── 1. Generate Client License: uv run python scripts/keygen.py ...
+       │      └── Generates: data/client.lic (Payload + Ed25519 digital signature)
+       └── 2. One-Command Deploy: uv run python scripts/deploy.py --host pi@<pi-ip>
+              ├── rsyncs source to Pi /tmp/hermes_build
+              ├── Compiles native binary & installs to /opt/hermes (0 .py files)
+              ├── Copies data/client.lic to /opt/hermes/data/client.lic
+              ├── Deletes /tmp/hermes_build completely (Zero source code on Pi!)
+              └── Restarts systemd service 'hermes'
 ```
 
 ### Runtime Cryptographic Verification
 When Hermes boots on the edge device:
 1. `ConfigManager` reads `data/client.lic`.
 2. Verifies the Ed25519 signature against the embedded company public key (`src/config/license.py`).
-3. If valid, loads `device_id`, `device_key`, `center_id`, `min_weight`, and `anpr_server_url` into memory.
+3. If valid, loads `device_id`, `device_key`, `center_id`, and `min_weight` into memory.
 4. If tampered or invalid, Hermes logs an authentication error and refuses to start.
 5. If absent (in local dev or test environments), falls back to `src/config/client_config.py` defaults.
 
@@ -335,11 +334,11 @@ Hermes uses a dual-layer configuration pattern:
 
 | Parameter | Location | UI Configurable? | Description |
 | :--- | :--- | :--- | :--- |
-| `device_id` | `client_config.py` | ❌ No (Compiled) | Primary edge device identifier for Gluvok Cloud API. |
-| `device_key` | `client_config.py` | ❌ No (Compiled) | Pre-shared key for stateless device header authentication. |
-| `center_id` | `client_config.py` | ❌ No (Compiled) | Collection center identifier for Gluvok Cloud API. |
-| `min_weight` | `client_config.py` | ❌ No (Compiled) | Minimum threshold weight in kg to trigger active weighing. |
-| `anpr_server_url` | `client_config.py` | ❌ No (Compiled) | HTTP POST endpoint of the Argus ANPR microservice. |
+| `device_id` | `client.lic` / Compiled | ❌ No (Licensed) | Primary edge device identifier for Gluvok Cloud API. |
+| `device_key` | `client.lic` / Compiled | ❌ No (Licensed) | Pre-shared key for stateless device header authentication. |
+| `center_id` | `client.lic` / Compiled | ❌ No (Licensed) | Collection center identifier for Gluvok Cloud API. |
+| `min_weight` | `client.lic` / Compiled | ❌ No (Licensed) | Minimum threshold weight in kg to trigger active weighing. |
+| `anpr_server_url` | `client_config.py` | ❌ No (Hardcoded) | Local Argus ANPR microservice endpoint (`http://127.0.0.1:8000/recognize`). |
 | `serial_port` | Baseline / SQLite | ✅ Yes (`/config`) | UART serial port connected to weigh scale (e.g. `/dev/ttyUSB0`). |
 | `serial_baudrate` | Baseline / SQLite | ✅ Yes (`/config`) | Baud rate for serial communication (typically `1200`, `9600`). |
 | `anpr_camera_urls` | Baseline / SQLite | ✅ Yes (`/config`) | Snapshot URLs of License Plate Cameras (Front, Rear). |

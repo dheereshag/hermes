@@ -36,7 +36,7 @@ class ConfigManager:
 
     @property
     def anpr_server_url(self) -> str:
-        return str(self.license.get("anpr_server_url", cc.ANPR_SERVER_URL))
+        return cc.ANPR_SERVER_URL
 
     @property
     def wifi_ssid(self) -> str: return str(self.runtime.get("wifi_ssid", cc.WIFI_SSID))

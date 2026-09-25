@@ -24,7 +24,6 @@ def sample_payload() -> dict[str, object]:
         "device_key": "secret_key_123",
         "center_id": 42,
         "min_weight": 85.5,
-        "anpr_server_url": "http://192.168.1.100:8000/recognize",
     }
 
 
@@ -64,7 +63,7 @@ def test_config_manager_with_license(tmp_path: Path, sample_payload: dict[str, o
     assert mgr.device_id == "test_pi_99"
     assert mgr.device_key == "secret_key_123"
     assert mgr.weight_threshold == 85.5
-    assert mgr.anpr_server_url == "http://192.168.1.100:8000/recognize"
+    assert mgr.anpr_server_url == "http://127.0.0.1:8000/recognize"
 
 
 def test_config_manager_fallback_without_license(tmp_path: Path) -> None:

@@ -13,7 +13,6 @@ def generate_client_license(
     device_key: str,
     center_id: int,
     min_weight: float = 70.0,
-    anpr_url: str = "http://127.0.0.1:8000/recognize",
     priv_key: str = DEFAULT_PRIV_KEY,
     output_path: str = "data/client.lic",
 ) -> None:
@@ -27,7 +26,6 @@ def generate_client_license(
         "device_key": device_key,
         "center_id": center_id,
         "min_weight": min_weight,
-        "anpr_server_url": anpr_url,
     }
     content = sign_license(payload, priv_key)
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
@@ -42,14 +40,13 @@ def main() -> None:
     parser.add_argument("--device-key", required=True, help="Client pre-shared key")
     parser.add_argument("--center-id", type=int, required=True, help="Collection center ID")
     parser.add_argument("--min-weight", type=float, default=70.0, help="Min weight threshold")
-    parser.add_argument("--anpr-url", default="http://127.0.0.1:8000/recognize", help="ANPR URL")
     parser.add_argument("--priv-key", default=DEFAULT_PRIV_KEY, help="Private key hex")
     parser.add_argument("--output", default="data/client.lic", help="Output path")
     args = parser.parse_args()
 
     generate_client_license(
         args.device_id, args.device_key, args.center_id,
-        args.min_weight, args.anpr_url, args.priv_key, args.output,
+        args.min_weight, args.priv_key, args.output,
     )
 
 
