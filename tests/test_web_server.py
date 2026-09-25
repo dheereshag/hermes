@@ -35,9 +35,23 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("text/html", res.content_type)
         html = res.get_data(as_text=True)
         self.assertIn("Gluvok Hermes", html)
-        self.assertIn("tailwindcss", html)
+        self.assertIn("/static/tailwindcss.js", html)
+        self.assertIn("/static/lucide.min.js", html)
+        self.assertNotIn("unpkg.com", html)
+        self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertIn("NO_PLATE_DETECTED", html)
         self.assertIn("REJECTED_HUMAN_DETECTED", html)
+
+    def test_static_assets_served(self):
+        res_tw = self.client.get("/static/tailwindcss.js")
+        self.assertEqual(res_tw.status_code, 200)
+        self.assertIn("javascript", res_tw.content_type)
+        self.assertGreater(len(res_tw.get_data()), 1000)
+
+        res_lucide = self.client.get("/static/lucide.min.js")
+        self.assertEqual(res_lucide.status_code, 200)
+        self.assertIn("javascript", res_lucide.content_type)
+        self.assertGreater(len(res_lucide.get_data()), 1000)
 
     def test_subsystem_page_routes(self):
         for route in ("/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config"):

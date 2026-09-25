@@ -114,6 +114,9 @@ hermes/
         │   ├── api.py         # REST API endpoints (/api/status, /api/config, /api/login, etc.)
         │   └── views.py       # Page routes serving the dashboard UI
         ├── server.py          # Threaded WSGI server runner (:8080) & lifecycle management
+        ├── static/            # Offline vendor JS bundles (Tailwind CSS v4 & Lucide Icons)
+        │   ├── lucide.min.js
+        │   └── tailwindcss.js
         └── templates/
             └── index.html     # Real-time Tailwind CSS v4 diagnostics & configuration web UI
 ```
@@ -306,6 +309,7 @@ GitHub Actions Runner (ubuntu-26.04-arm)
               ├── src.*.so (Compiled C-extension module)
               ├── main.py (Application bootstrap & graceful shutdown handler)
               ├── src/web/templates/ (HTML5 diagnostics UI)
+              ├── src/web/static/ (Offline vendor JS bundles: Tailwind & Lucide)
               └── pyproject.toml / uv.lock (Reproducible runtime dependencies)
 ```
 
@@ -313,7 +317,7 @@ GitHub Actions Runner (ubuntu-26.04-arm)
 When `uv run python main.py` is invoked on the edge device:
 1. The Python 3.14 runtime detects the native `src.*.so` module in the root directory.
 2. Python loads `src` directly from the shared library rather than interpreting raw `.py` source scripts.
-3. Flask's application factory resolves Jinja templates via `src/web/templates` relative to `__file__`, providing full web console capabilities without exposing raw source logic.
+3. Flask's application factory resolves Jinja templates via `src/web/templates` and static assets via `src/web/static` relative to `__file__`, providing full offline web console capabilities without internet dependency.
 
 ---
 

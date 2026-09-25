@@ -65,6 +65,7 @@ jobs:
           mkdir -p test_verify/src/web
           cp compiled_dist/src.*.so test_verify/
           cp -r src/web/templates test_verify/src/web/
+          cp -r src/web/static test_verify/src/web/
           cd test_verify
           uv run python -c "import src; from src.config import config; from src.web import create_app; print('SUCCESS: Native ARM64 Hermes src module loaded!')"
 
@@ -86,6 +87,7 @@ jobs:
           cp main.py pyproject.toml uv.lock README.md .python-version "${RELEASE_DIR}/"
           mkdir -p "${RELEASE_DIR}/src/web"
           cp -r src/web/templates "${RELEASE_DIR}/src/web/"
+          cp -r src/web/static "${RELEASE_DIR}/src/web/"
           [ -f .env.example ] && cp .env.example "${RELEASE_DIR}/"
           [ -f .gitignore ] && cp .gitignore "${RELEASE_DIR}/"
 

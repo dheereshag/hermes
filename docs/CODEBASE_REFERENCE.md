@@ -32,6 +32,7 @@ Welcome to the **Hermes Weighbridge & ANPR Integration Controller** maintainer m
    - [`auth.py`](#srcwebauthpy)
    - [`validation.py`](#srcwebvalidationpy)
    - [`server.py`](#srcwebserverpy)
+   - [`static/`](#srcwebstatic)
    - [`templates/index.html`](#srcwebtemplatesindexhtml)
 8. [Test Suites (`tests/`)](#8-test-suites-tests)
 9. [Operational Timings & Design Tradeoffs](#9-operational-timings--design-tradeoffs)
@@ -402,10 +403,15 @@ WSGI server background daemon runner.
   - **`stop() -> None`**: Calls `_server.shutdown()` and `server_close()` cleanly.
 - **Functions**: `start_web_server()`, `stop_web_server()`.
 
+### `src/web/static/`
+Contains offline-ready client-side vendor JavaScript libraries served via Flask's built-in `/static/` route:
+- `tailwindcss.js`: Tailwind CSS v4 standalone browser runtime bundle (compiled JIT).
+- `lucide.min.js`: Lucide Icons standalone UMD browser bundle (`window.lucide`).
+
 ### `src/web/templates/index.html`
 Single-page web application featuring:
-- **Tailwind CSS v4** styling via `@tailwindcss/browser@4` runtime.
-- **Lucide Icons** integration.
+- **Tailwind CSS v4** styling via local `static/tailwindcss.js` (offline-ready, no CDN dependency).
+- **Lucide Icons** integration via local `static/lucide.min.js` (offline-ready, no CDN dependency).
 - Navigation tabs: Overview, Scale Indicator, ANPR & Cameras, Cloud Transfer, Wi-Fi Setup, Telemetry Logs, System Config.
 - Real-time client-side polling every 1,000ms against `/api/status`.
 - Modal lock overlay with superadmin authentication protecting hardware configuration.

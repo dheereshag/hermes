@@ -80,3 +80,4 @@ uv run python main.py
 - **URL**: `http://localhost:8080` (or `http://<pi-ip>:8080`)
 - **Default Superadmin User**: `superadmin`
 - **Default Superadmin Password**: `Gluvok@241821`
+- **Offline Resilient**: Self-hosted Tailwind CSS v4 and Lucide icon assets (no internet or CDN required).
