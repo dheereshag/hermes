@@ -57,29 +57,76 @@ uv run python scripts/keygen.py \
 
 #### Step 2: 1-Command Deploy to Raspberry Pi 5
 
-##### How to find your Pi IP or Hostname:
-- **From your Mac on same Wi-Fi**: You can use the mDNS hostname `raspberrypi.local` directly (no IP needed!), or find the numeric IP via:
+##### How to find your Pi Hostname or IP:
+- **From your Mac on same Wi-Fi**: You can use the mDNS hostname directly (e.g. `hermes.local` or `raspberrypi.local`):
   ```bash
-  ping -c 1 raspberrypi.local
+  ping -c 1 hermes.local
   ```
 - **Directly on the Pi**: Run `hostname -I` in the Pi terminal.
 
-##### Run Deployment:
-Transfers code, compiles the native binary on the Pi, installs into `/opt/hermes`, and **automatically purges all `.py` source code**:
+##### Run Deployment from Mac:
+Transfers code, compiles the native binary on the Pi, sets up dependencies, installs `client.lic`, and **automatically purges all `.py` source code**:
 ```bash
-# Using mDNS hostname (easiest):
-uv run python scripts/deploy.py --host pi@raspberrypi.local
+# Using mDNS hostname (e.g. user 'gluvok' on 'hermes.local'):
+uv run python scripts/deploy.py --host gluvok@hermes.local
 
 # Or using numeric IP:
-uv run python scripts/deploy.py --host pi@192.168.1.50
+uv run python scripts/deploy.py --host gluvok@192.168.1.41
 ```
 
 > **What this does:**
-> 1. Syncs source to `/tmp/hermes_build` on the Pi via `rsync`.
-> 2. Compiles native binary and installs to `/opt/hermes` (0 `.py` files).
-> 3. Installs `data/client.lic` into `/opt/hermes/data/client.lic`.
-> 4. **Deletes `/tmp/hermes_build` completely** from the Pi.
-> 5. Restarts the `hermes` systemd service.
+> 1. Syncs source code into `/opt/hermes/` via `rsync`.
+> 2. Sets up Python dependencies in `/opt/hermes/.venv` via `uv sync`.
+> 3. Compiles native machine-code binary `/opt/hermes/hermes` and runner `/opt/hermes/hermes.sh` using GCC via Nuitka.
+> 4. Uploads `data/client.lic` into `/opt/hermes/data/client.lic`.
+> 5. **Purges all `.py` source files, tests, and documentation from the Pi** (leaving 0 `.py` files on client hardware).
+
+---
+
+#### Step 3: Run Hermes on the Pi
+
+##### Interactive Run (Live Terminal Logs):
+```bash
+ssh gluvok@hermes.local "cd /opt/hermes && ./hermes.sh"
+```
+
+##### 24/7 Production Background Service (Auto-Start on Boot):
+To ensure Hermes runs continuously and restarts automatically on reboot:
+
+```bash
+ssh gluvok@hermes.local "sudo tee /etc/systemd/system/hermes.service > /dev/null << 'EOF'
+[Unit]
+Description=Hermes Weighment & ANPR Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gluvok
+WorkingDirectory=/opt/hermes
+ExecStart=/opt/hermes/hermes.sh
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now hermes
+"
+```
+
+To monitor the background service:
+```bash
+# Check service status:
+ssh gluvok@hermes.local "sudo systemctl status hermes"
+
+# Follow live systemd logs:
+ssh gluvok@hermes.local "sudo journalctl -u hermes -f"
+```
+
+---
 
 #### Manual / Offline Deployment (Air-Gapped)
 If deploying without network access, compile and install directly on the Pi:
@@ -91,10 +138,8 @@ uv run python scripts/package.py --install /opt/hermes
 cp client.lic /opt/hermes/data/client.lic
 
 # 3. Start Hermes
-cd /opt/hermes && uv run ./hermes
+cd /opt/hermes && ./hermes.sh
 ```
-
-> **Auto-Start on Boot:** For unattended field deployment, configure systemd to run `/opt/hermes/hermes`.
 
 ---
 

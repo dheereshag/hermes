@@ -306,12 +306,12 @@ To protect intellectual property and eliminate source code exposure, Hermes comp
 Developer / Mac Machine
        ├── 1. Generate Client License: uv run python scripts/keygen.py ...
        │      └── Generates: data/client.lic (Payload + Ed25519 digital signature)
-       └── 2. One-Command Deploy: uv run python scripts/deploy.py --host pi@<pi-ip>
-              ├── rsyncs source to Pi /tmp/hermes_build
-              ├── Compiles native binary & installs to /opt/hermes (0 .py files)
-              ├── Copies data/client.lic to /opt/hermes/data/client.lic
-              ├── Deletes /tmp/hermes_build completely (Zero source code on Pi!)
-              └── Restarts systemd service 'hermes'
+       └── 2. One-Command Deploy: uv run python scripts/deploy.py --host <user>@<pi-host>
+              ├── rsyncs source to /opt/hermes
+              ├── Sets up dependencies in /opt/hermes/.venv with uv sync
+              ├── Compiles native binary & hermes.sh via GCC/Nuitka
+              ├── Uploads data/client.lic to /opt/hermes/data/client.lic
+              └── Purges all .py source files in-place (Zero source code on Pi!)
 ```
 
 ### Runtime Cryptographic Verification

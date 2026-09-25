@@ -22,7 +22,7 @@ def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/clien
     print(f"[Deploy] 1. Preparing {target} and checking uv on {host}...")
     prep = (
         f"sudo mkdir -p {target} && sudo chown -R $USER:$USER {target}; "
-        "export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"; "
+        "export PATH=\"$HOME/.local/bin:$PATH\"; "
         "command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh"
     )
     run_cmd(["ssh", "-t", host, f"bash -c '{prep}'"])
@@ -30,7 +30,7 @@ def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/clien
     run_cmd(["rsync", "-avz", "--delete", *EXCLUDES, "./", f"{host}:{target}/"])
     print(f"[Deploy] 3. Building native binary on {host} and purging source code...")
     build = (
-        "set -e; export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"; "
+        "set -e; export PATH=\"$HOME/.local/bin:$PATH\"; "
         f"cd {target} && uv sync && uv run python scripts/build.py --output-dir={target}; "
         f"find {target} -maxdepth 1 -name '*.py' -delete && find {target}/src -name '*.py' -delete; "
         f"rm -rf {target}/scripts {target}/tests {target}/docs; "
