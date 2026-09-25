@@ -15,7 +15,7 @@ import time
 
 import serial
 
-from src.config.config_manager import config as app_config
+from src.config import config as app_config
 from src.config.constants import (
     DEFAULT_SERIAL_BAUDRATE,
     DEFAULT_SERIAL_PORT,

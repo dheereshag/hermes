@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from src.config.config_manager import config
+from src.config import config
 from src.core.telemetry import reset_state
 from src.web.app import create_app
 from src.web.auth import reset_auth_state
@@ -132,13 +132,10 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
 
     def test_post_api_config_success(self):
         payload = {
-            "min_weight": 65.0,
             "serial_port": "/dev/ttyUSB0",
             "serial_baudrate": 9600,
             "anpr_camera_url": "http://192.168.1.150/snapshot",
             "auxiliary_camera_urls": ["http://192.168.1.151/snapshot"],
-            "anpr_server_url": "http://127.0.0.1:8000/recognize",
-            "center_id": 5,
         }
         res = self.client.post(
             "/api/config",
@@ -147,7 +144,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(config.weight_threshold, 65.0)
+        self.assertEqual(config.weight_threshold, 70.0)
         self.assertEqual(config.serial_port, "/dev/ttyUSB0")
         self.assertEqual(config.serial_baudrate, 9600)
         self.assertEqual(config.device_id, "pi1")
@@ -157,7 +154,6 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
 
     def test_post_api_config_with_multiple_anpr_cameras(self):
         payload = {
-            "min_weight": 70.0,
             "anpr_camera_urls": [
                 "http://127.0.0.1:8999/front",
                 "http://127.0.0.1:8999/rear",

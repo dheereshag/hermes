@@ -1,9 +1,12 @@
-from src.config.config_manager import ConfigManager, config
+"""src.config — Centralized system configuration and constants."""
+from __future__ import annotations
+
 from src.config.constants import (
     ANPR_CAPTURE_INTERVAL,
     ANPR_SERVER_TIMEOUT,
     CAMERA_TIMEOUT,
     CLOUD_POST_TIMEOUT,
+    DEFAULT_DB_PATH,
     DEFAULT_HOTSPOT_PASS,
     DEFAULT_HOTSPOT_SSID,
     DEFAULT_SERIAL_BAUDRATE,
@@ -21,12 +24,16 @@ from src.config.constants import (
     STABILITY_DURATION,
     STABILITY_TOLERANCE,
 )
+from src.config.manager import ConfigManager
+
+config = ConfigManager()
 
 __all__ = [
     "ANPR_CAPTURE_INTERVAL",
     "ANPR_SERVER_TIMEOUT",
     "CAMERA_TIMEOUT",
     "CLOUD_POST_TIMEOUT",
+    "DEFAULT_DB_PATH",
     "DEFAULT_HOTSPOT_PASS",
     "DEFAULT_HOTSPOT_SSID",
     "DEFAULT_SERIAL_BAUDRATE",

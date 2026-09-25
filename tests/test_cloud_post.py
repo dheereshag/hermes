@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from src.config.config_manager import config
+from src.config import ConfigManager, config
 from src.core.telemetry import get_error_counts, get_system_events, reset_state
 from src.integrations.gluvok import (
     get_device_headers,
@@ -16,23 +16,14 @@ from src.integrations.gluvok import (
 class TestCloudPost(unittest.TestCase):
     def setUp(self):
         reset_state()
-        self.orig_device_id = config.device_id
-        self.orig_device_key = config.device_key
-        self.orig_center_id = config.center_id
-        config.device_id = 42
-        config.device_key = "hardware123"
-        config.center_id = 1
 
     def tearDown(self):
-        config.device_id = self.orig_device_id
-        config.device_key = self.orig_device_key
-        config.center_id = self.orig_center_id
         reset_state()
 
     def test_get_device_headers(self):
         headers = get_device_headers()
-        self.assertEqual(headers["x-device-id"], "42")
-        self.assertEqual(headers["x-device-key"], "hardware123")
+        self.assertEqual(headers["x-device-id"], str(config.device_id))
+        self.assertEqual(headers["x-device-key"], str(config.device_key))
 
     @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_success_201_preserves_payload(self, mock_post: Mock):
@@ -51,14 +42,14 @@ class TestCloudPost(unittest.TestCase):
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
 
-        # 1. Verify Basic Auth (-u "42:hardware123")
-        self.assertEqual(call_kwargs["auth"], ("42", "hardware123"))
+        # 1. Verify Basic Auth (-u "{device_id}:{device_key}")
+        self.assertEqual(call_kwargs["auth"], (str(config.device_id), str(config.device_key)))
 
         # 2. Verify form data
         data = call_kwargs["data"]
         self.assertEqual(data["detected_vehicle_number"], "DL1CAB1234")
         self.assertEqual(data["weight"], "35200.0")
-        self.assertEqual(data["center_id"], "1")
+        self.assertEqual(data["center_id"], str(config.center_id))
 
         # 3. Verify multipart file attachment
         files = call_kwargs["files"]
@@ -74,10 +65,9 @@ class TestCloudPost(unittest.TestCase):
 
     @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_aborts_when_credentials_missing(self, mock_post: Mock):
-        config.device_key = ""
-        session = {"weight": 1000.0, "anpr_plate": "MH12AB1234"}
-
-        post_to_cloud(session)
+        with patch.object(ConfigManager, "device_key", ""):
+            session = {"weight": 1000.0, "anpr_plate": "MH12AB1234"}
+            post_to_cloud(session)
 
         mock_post.assert_not_called()
         error_counts = get_error_counts()

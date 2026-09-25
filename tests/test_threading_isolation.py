@@ -3,7 +3,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from src.config.config_manager import ConfigManager
+from src.config import ConfigManager
 from src.core.session import SessionPhase, WeighbridgeSessionManager
 from src.core.stability import ScaleStabilityMachine
 
@@ -70,16 +70,16 @@ class TestThreadingIsolation(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            temp_config_file = os.path.join(temp_dir, "test_hermes_config.json")
-            cm = ConfigManager(file_path=temp_config_file)
+            temp_db_file = os.path.join(temp_dir, "test_hermes.db")
+            cm = ConfigManager(db_path=temp_db_file)
             errors: list[OSError | json.JSONDecodeError | ValueError | KeyError | RuntimeError] = []
 
             def writer_task(idx: int):
                 try:
                     for i in range(10):
                         cm.update_system_config(
-                            min_weight=50.0 + idx + i,
-                            serial_baudrate=1200,
+                            serial_port=f"/dev/ttyUSB{idx}",
+                            serial_baudrate=1200 + (idx * 100),
                         )
                         cm.update_wifi_credentials(f"SSID_{idx}_{i}", f"PASS_{idx}_{i}")
                 except (OSError, json.JSONDecodeError, ValueError, KeyError, RuntimeError) as e:

@@ -13,7 +13,7 @@ import time
 from enum import Enum
 from typing import Any
 
-from src.config.config_manager import config
+from src.config import config
 from src.config.constants import STABILITY_DURATION, STABILITY_TOLERANCE
 from src.core.session import session_manager
 

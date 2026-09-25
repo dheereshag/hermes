@@ -7,7 +7,7 @@ from typing import Any
 import requests
 from flask import Blueprint, jsonify, request
 
-from src.config.config_manager import config
+from src.config import config
 from src.core import get_spool_stats
 from src.core.telemetry import (
     get_error_counts,
@@ -162,17 +162,12 @@ def post_config():
     old_baud = config.serial_baudrate
 
     config.update_system_config(
-        min_weight=data.get("min_weight"),
         serial_port=data.get("serial_port"),
         serial_baudrate=data.get("serial_baudrate"),
         anpr_camera_url=data.get("anpr_camera_url"),
         anpr_camera_urls=data.get("anpr_camera_urls"),
         auxiliary_camera_urls=data.get("auxiliary_camera_urls"),
-        anpr_server_url=data.get("anpr_server_url"),
-        center_id=data.get("center_id"),
     )
-
-
 
     _apply_uart_config_changes(
         data.get("serial_port"),
@@ -200,7 +195,7 @@ def post_wifi():
         return jsonify({"success": False, "error": "SSID cannot be empty"}), 400
 
     config.update_wifi_credentials(ssid, password)
-    record_system_event("CONFIG", f"Saved Wi-Fi SSID '{ssid}' to config.json. Attempting connection...")
+    record_system_event("CONFIG", f"Saved Wi-Fi SSID '{ssid}' to persistent storage. Attempting connection...")
 
     from src.devices.wifi import connect_to_wifi
     is_connected, msg = connect_to_wifi(ssid, password)
@@ -224,8 +219,8 @@ def post_wifi():
 def post_wifi_clear():
     """Clears saved Wi-Fi credentials from persistent storage."""
     config.clear_wifi_credentials()
-    record_system_event("CONFIG", "Wi-Fi credentials cleared from config.json")
+    record_system_event("CONFIG", "Wi-Fi credentials cleared from persistent storage.")
     return jsonify({
         "success": True,
-        "message": "Wi-Fi credentials cleared from config.json.",
+        "message": "Wi-Fi credentials cleared from persistent storage.",
     }), 200

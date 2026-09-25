@@ -12,3 +12,6 @@ data/
 # System files
 .DS_Store
 
+# Compiled binaries & extensions
+*.so
+compiled_dist/

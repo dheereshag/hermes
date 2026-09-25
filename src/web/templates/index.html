@@ -102,7 +102,7 @@
         <div class="flex flex-col min-w-0 flex-1">
           <div class="flex items-center gap-1.5">
             <span class="font-bold text-sm text-foreground truncate">LUVOK Hermes</span>
-            <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">v2.0</span>
+            <span class="px-1.5 py-0.2 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">v2.0</span>
           </div>
           <span class="text-xs text-muted-foreground truncate">Weighbridge Edge</span>
         </div>
@@ -113,7 +113,7 @@
         
         <!-- Group 1: Platform -->
         <div class="space-y-1">
-          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Platform</div>
+          <div class="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Platform</div>
           <nav class="space-y-1">
             <button onclick="switchTab('overview')" id="nav-item-overview" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium bg-sidebar-accent text-sidebar-accent-foreground transition">
               <i data-lucide="layout-dashboard" class="w-4 h-4 text-emerald-400"></i>
@@ -132,7 +132,7 @@
 
         <!-- Group 2: Communications -->
         <div class="space-y-1">
-          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Communications</div>
+          <div class="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Communications</div>
           <nav class="space-y-1">
             <button onclick="switchTab('cloud')" id="nav-item-cloud" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
               <i data-lucide="cloud-upload" class="w-4 h-4"></i>
@@ -147,7 +147,7 @@
 
         <!-- Group 3: System Administration -->
         <div class="space-y-1">
-          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Admin Panel</div>
+          <div class="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin Panel</div>
           <nav class="space-y-1">
             <button onclick="switchTab('config')" id="nav-item-config" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
               <i data-lucide="sliders-horizontal" class="w-4 h-4 text-amber-400"></i>
@@ -175,7 +175,7 @@
           </div>
           <div class="flex flex-col min-w-0">
             <span class="text-xs font-semibold text-foreground truncate">Super Admin</span>
-            <span class="text-[10px] text-muted-foreground truncate">Operator</span>
+            <span class="text-xs text-muted-foreground truncate">Operator</span>
           </div>
         </div>
         <button onclick="logoutConfig()" title="Lock / Sign Out" class="p-1.5 rounded-md hover:bg-zinc-800 text-muted-foreground hover:text-white transition">
@@ -212,7 +212,7 @@
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span id="network-ip-display">Connecting...</span>
         </div>
-        <span id="hotspot-badge" class="hidden px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">Hotspot: 10.42.0.1</span>
+        <span id="hotspot-badge" class="hidden px-2 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">Hotspot: 10.42.0.1</span>
         <button onclick="fetchStatus(true)" class="p-2 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition">
           <i id="refresh-icon" data-lucide="refresh-cw" class="w-4 h-4"></i>
         </button>
@@ -235,13 +235,13 @@
           <div onclick="switchTab('scale')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-emerald-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
             <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>Scale Indicator</span>
-              <span id="ov-scale-state" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary text-foreground">IDLE</span>
+              <span id="ov-scale-state" class="px-2 py-0.5 rounded-full text-xs font-bold bg-secondary text-foreground">IDLE</span>
             </div>
             <div>
               <div id="ov-weight" class="text-3xl font-extrabold font-mono text-emerald-400">0.000 <span class="text-sm font-normal text-muted-foreground">kg</span></div>
-              <p class="text-[11px] font-mono text-muted-foreground mt-1">/dev/ttyUSB0 @ 1200 baud</p>
+              <p class="text-xs font-mono text-muted-foreground mt-1">/dev/ttyUSB0 @ 1200 baud</p>
             </div>
-            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+            <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
               <span>10s Stability Machine</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
@@ -251,13 +251,13 @@
           <div onclick="switchTab('anpr')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-sky-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
             <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>ANPR Microservice</span>
-              <span id="ov-argus-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ONLINE</span>
+              <span id="ov-argus-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ONLINE</span>
             </div>
             <div>
               <div class="text-lg font-bold text-foreground">YOLO v11 + Docling</div>
-              <p class="text-[11px] font-mono text-muted-foreground mt-1">Port 8000 (FastAPI)</p>
+              <p class="text-xs font-mono text-muted-foreground mt-1">Port 8000 (FastAPI)</p>
             </div>
-            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+            <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
               <span>Consensus Voting</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
@@ -267,13 +267,13 @@
           <div onclick="switchTab('cloud')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-violet-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
             <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>Cloud Transfer</span>
-              <span id="ov-sb-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">READY</span>
+              <span id="ov-sb-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">READY</span>
             </div>
             <div>
               <div id="ov-center-id" class="text-base font-bold text-foreground truncate">Center ID: 1</div>
-              <p class="text-[11px] text-muted-foreground mt-1">Gluvok Cloud API</p>
+              <p class="text-xs text-muted-foreground mt-1">Gluvok Cloud API</p>
             </div>
-            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+            <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
               <span>Bearer JWT Auth</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
@@ -283,13 +283,13 @@
           <div onclick="switchTab('wifi')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-amber-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
             <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>Local Network</span>
-              <span id="ov-wifi-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONNECTED</span>
+              <span id="ov-wifi-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONNECTED</span>
             </div>
             <div>
               <div id="ov-wifi-ssid" class="text-base font-bold text-foreground truncate">Setup Portal</div>
-              <p class="text-[11px] text-muted-foreground mt-1">Fallback AP: Gluvok-Setup</p>
+              <p class="text-xs text-muted-foreground mt-1">Fallback AP: Gluvok-Setup</p>
             </div>
-            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+            <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
               <span>Watchdog Active</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
@@ -461,7 +461,7 @@
                 Sign In
               </button>
             </form>
-            <p class="text-[10px] text-muted-foreground text-center">Protected admin panel &bull; Session token secured</p>
+            <p class="text-xs text-muted-foreground text-center">Protected admin panel &bull; Session token secured</p>
           </div>
         </div>
 
@@ -571,7 +571,7 @@
                 Sign In
               </button>
             </form>
-            <p class="text-[10px] text-muted-foreground text-center">Protected hardware settings &bull; Session token secured</p>
+            <p class="text-xs text-muted-foreground text-center">Protected hardware settings &bull; Session token secured</p>
           </div>
         </div>
 
@@ -595,19 +595,25 @@
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div class="space-y-1.5">
-                <label class="text-xs font-medium text-foreground">Threshold Weight (kg)</label>
-                <input id="cfg-min-weight" type="number" step="0.1" min="0" placeholder="50.0" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">Minimum weight to initiate session</p>
+                <div class="flex items-center justify-between">
+                  <label class="text-xs font-medium text-foreground">Threshold Weight (kg)</label>
+                  <span class="text-xs uppercase font-bold tracking-wider text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">Compiled</span>
+                </div>
+                <input id="cfg-min-weight" type="text" readonly disabled class="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-input font-mono text-sm text-muted-foreground cursor-not-allowed" />
+                <p class="text-xs text-muted-foreground">Fixed compiled trigger threshold</p>
               </div>
               <div class="space-y-1.5">
-                <label class="text-xs font-medium text-foreground">Collection Center ID</label>
-                <input id="cfg-center-id" type="number" min="1" step="1" placeholder="1" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">Collection center identifier</p>
+                <div class="flex items-center justify-between">
+                  <label class="text-xs font-medium text-foreground">Collection Center ID</label>
+                  <span class="text-xs uppercase font-bold tracking-wider text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">Compiled</span>
+                </div>
+                <input id="cfg-center-id" type="text" readonly disabled class="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-input font-mono text-sm text-muted-foreground cursor-not-allowed" />
+                <p class="text-xs text-muted-foreground">Fixed compiled center identifier</p>
               </div>
               <div class="space-y-1.5">
                 <label class="text-xs font-medium text-foreground">Serial Port Path</label>
                 <input id="cfg-serial-port" type="text" placeholder="/dev/ttyUSB0" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
-                <p class="text-[11px] text-muted-foreground">UART hardware device path</p>
+                <p class="text-xs text-muted-foreground">UART hardware device path</p>
               </div>
               <div class="space-y-1.5">
                 <label class="text-xs font-medium text-foreground">Baud Rate</label>
@@ -623,7 +629,7 @@
                   <option value="57600">57600</option>
                   <option value="115200">115200</option>
                 </select>
-                <p class="text-[11px] text-muted-foreground">Indicator communication speed</p>
+                <p class="text-xs text-muted-foreground">Indicator communication speed</p>
               </div>
             </div>
           </div>
@@ -647,7 +653,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <label class="text-xs font-medium text-foreground block">ANPR License Plate Cameras</label>
-                  <p class="text-[11px] text-muted-foreground">Continuous OCR streams (e.g. Front and Rear number plate cameras)</p>
+                  <p class="text-xs text-muted-foreground">Continuous OCR streams (e.g. Front and Rear number plate cameras)</p>
                 </div>
                 <button type="button" onclick="addAnprCameraField()" class="px-3 py-1.5 rounded-lg border border-input bg-secondary/60 hover:bg-secondary text-xs font-semibold text-foreground transition flex items-center gap-1.5">
                   <i data-lucide="plus" class="w-3.5 h-3.5"></i>
@@ -664,7 +670,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <label class="text-xs font-medium text-foreground block">Auxiliary Overview Cameras</label>
-                  <p class="text-[11px] text-muted-foreground">Contextual overview snapshots captured at start of weighment</p>
+                  <p class="text-xs text-muted-foreground">Contextual overview snapshots captured at start of weighment</p>
                 </div>
                 <button type="button" onclick="addAuxCameraField()" class="px-3 py-1.5 rounded-lg border border-input bg-secondary/60 hover:bg-secondary text-xs font-semibold text-foreground transition flex items-center gap-1.5">
                   <i data-lucide="plus" class="w-3.5 h-3.5"></i>
@@ -677,21 +683,24 @@
             </div>
           </div>
 
-          <!-- Section 3: ANPR Microservice Endpoint -->
+          <!-- Section 3: ANPR Microservice Endpoint (Compiled) -->
           <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-4">
-            <div class="flex items-center gap-3 pb-3 border-b border-border">
-              <div class="p-2.5 rounded-lg bg-secondary text-primary">
-                <i data-lucide="cpu" class="w-5 h-5"></i>
+            <div class="flex items-center justify-between pb-3 border-b border-border">
+              <div class="flex items-center gap-3">
+                <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                  <i data-lucide="cpu" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold text-foreground">ANPR Microservice Endpoint (Argus)</h3>
+                  <p class="text-xs text-muted-foreground">Fixed FastAPI inference server URL (compiled per-client)</p>
+                </div>
               </div>
-              <div>
-                <h3 class="text-base font-semibold text-foreground">ANPR Microservice Endpoint (Argus)</h3>
-                <p class="text-xs text-muted-foreground">FastAPI inference server URL (auto-maps to http://127.0.0.1:8000/recognize)</p>
-              </div>
+              <span class="text-xs uppercase font-bold tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded border border-border">Compiled</span>
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-foreground">Argus Server URL</label>
-              <input id="cfg-anpr-server-url" type="text" placeholder="http://127.0.0.1:8000/recognize" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+              <input id="cfg-anpr-server-url" type="text" readonly disabled class="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-input font-mono text-sm text-muted-foreground cursor-not-allowed" />
             </div>
           </div>
 
@@ -717,7 +726,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="h-12 px-6 flex items-center justify-between border-t border-border bg-background text-[11px] text-muted-foreground">
+    <footer class="h-12 px-6 flex items-center justify-between border-t border-border bg-background text-xs text-muted-foreground">
       <span>Gluvok Weighbridge Industrial Integration System</span>
       <span>Zero Disk Wear &bull; In-RAM Processing</span>
     </footer>
@@ -1040,14 +1049,11 @@
       const auxUrls = Array.from(auxInputs).map(el => el.value.trim()).filter(Boolean);
 
       const payload = {
-        min_weight: parseFloat(document.getElementById('cfg-min-weight').value) || 50.0,
         serial_port: document.getElementById('cfg-serial-port').value.trim(),
         serial_baudrate: parseInt(document.getElementById('cfg-serial-baudrate').value) || 1200,
         anpr_camera_urls: anprUrls,
         anpr_camera_url: anprUrls.length > 0 ? anprUrls[0] : '',
         auxiliary_camera_urls: auxUrls,
-        anpr_server_url: document.getElementById('cfg-anpr-server-url').value.trim(),
-        center_id: parseInt(document.getElementById('cfg-center-id').value) || 1,
       };
 
 
@@ -1153,7 +1159,7 @@
         <div class="p-4 rounded-xl border border-border bg-card space-y-2">
           <div class="flex items-center justify-between">
             <span class="font-mono font-bold text-foreground text-xs">${e.code}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-secondary text-secondary-foreground">${e.category}</span>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary text-secondary-foreground">${e.category}</span>
           </div>
           <p class="text-muted-foreground text-xs leading-relaxed"><strong class="text-foreground">Cause:</strong> ${e.cause}</p>
           <div class="p-2 rounded-lg bg-zinc-950 text-emerald-400 text-xs font-mono">Fix: ${e.fix}</div>
@@ -1199,10 +1205,10 @@
         // Argus & Cloud
         const argusBadge = document.getElementById("ov-argus-badge");
         if (data.argus && data.argus.online) {
-          argusBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          argusBadge.className = "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
           argusBadge.textContent = "ONLINE";
         } else {
-          argusBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive/10 text-destructive border border-destructive/20";
+          argusBadge.className = "px-2 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
           argusBadge.textContent = "OFFLINE";
         }
 

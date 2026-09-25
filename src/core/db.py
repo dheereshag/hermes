@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Any
 
-from src.config.config_manager import config
+from src.config import config
 from src.config.constants import (
     DEFAULT_DB_PATH,
     SPOOL_BASE_RETRY_DELAY,

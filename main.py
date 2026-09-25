@@ -86,7 +86,7 @@ def setup():
     spool_worker.start()
 
 
-    # Log active settings from config.json
+    # Log active client settings
     logger.info(
         f"[Config] Device ID: {config.device_id} | "
         f"Center ID: {config.center_id} | "
@@ -97,7 +97,7 @@ def setup():
     if config.device_id and config.device_key:
         logger.info(f"[Auth] Gluvok device authentication configured for Device ID: {config.device_id}")
     else:
-        logger.warning("[Auth] Gluvok device credentials (device_id, device_key) not configured in config.json.")
+        logger.warning("[Auth] Gluvok device credentials (device_id, device_key) not configured in client_config.py.")
 
 
 def loop():

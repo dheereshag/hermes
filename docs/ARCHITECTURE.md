@@ -64,14 +64,12 @@ graph TD
 ```
 hermes/
 ├── main.py                    # Application entry point, setup, and loop
-├── config.json                # Runtime hardware & cloud config (gitignored; auto-created on first run)
 ├── pyproject.toml             # Project definition, dependencies, and test config (uv-managed)
 ├── uv.lock                    # Dependency lockfile
 ├── README.md                  # Streamlined operational runbook
 ├── AGENTS.md                  # Code quality, linting, typing, and architectural rules
-├── .github/
-│   └── workflows/
-│       └── nuitka-arm64.yml   # Native ARM64 Nuitka compilation and orphan release deployment
+├── scripts/
+│   └── build.py               # Local Nuitka compilation script for bespoke client builds
 ├── docs/
 │   ├── ARCHITECTURE.md        # Deep architectural design, threading, and hardware interfaces
 │   └── CODEBASE_REFERENCE.md  # Exhaustive function-by-function developer guide
@@ -86,9 +84,12 @@ hermes/
 │   └── test_wifi_manager.py   # Wi-Fi watchdog & emergency hotspot fallback tests
 └── src/
     ├── config/
-    │   ├── __init__.py         # Subpackage exports
-    │   ├── config_manager.py  # JSON-backed configuration manager singleton (thread-safe RLock)
-    │   └── constants.py       # System timing, timeout constants, buffer sizes & regexes
+    │   ├── __init__.py        # Subpackage exports (`config`, `ConfigManager`)
+    │   ├── client_config.py   # Bespoke compiled client configuration (credentials, IDs, URLs)
+    │   ├── constants.py       # System timing, timeout constants, buffer sizes & regexes
+    │   ├── manager.py         # Unified thread-safe ConfigManager accessor
+    │   ├── runtime.py         # Runtime configuration override mutator
+    │   └── store.py           # SQLite persistence for runtime overrides (`data/hermes.db`)
     ├── core/
     │   ├── __init__.py         # Subpackage exports
     │   ├── db.py              # SQLite WAL durable outbox store with atomic lease locking
@@ -190,11 +191,17 @@ hermes/
   - `FallbackWebServer` wraps Werkzeug's `make_server` to serve the WSGI application in a background daemon thread with graceful `start()` and `stop()` lifecycle management.
 
 ### 5.5 Configuration Management (`src/config/`)
-- **`config_manager.py`**:
-  - Persistent JSON-backed storage (`config.json`) with `threading.RLock()` synchronization.
-  - Singleton providing system-wide settings with fallback defaults, disk persistence, and dynamic getters for camera and ANPR URLs.
+Hermes employs a dual-layer configuration pattern adhering to NASA JPL Rule 4 (≤ 60 lines per file):
+- **`client_config.py`**:
+  - Bespoke compiled client configuration containing hardcoded, protected values for `DEVICE_ID`, `DEVICE_KEY`, `CENTER_ID`, `MIN_WEIGHT`, `ANPR_SERVER_URL`, and initial hardware defaults.
+- **`store.py`**:
+  - Thread-safe SQLite store managing the `runtime_config` table in `data/hermes.db` to persist field calibrations and on-site Wi-Fi credentials across reboots.
+- **`runtime.py`**:
+  - Mutator managing runtime overrides with thread safety (`threading.RLock()`).
+- **`manager.py`**:
+  - Unified `ConfigManager` exposing system properties with fallback to `client_config`.
 - **`constants.py`**:
-  - Centralized repository of all system constants, timing windows, timeouts, buffer sizes, and validation regexes.
+  - System operational constants, timeouts, buffer sizes, and Indian vehicle registration regex.
 
 ---
 
@@ -291,21 +298,18 @@ Single SpoolWorker (FIFO Sequential Processing)
 
 ---
 
-## 9. Binary Compilation & Edge Distribution Architecture
+## 9. Binary Compilation & Bespoke Client Distribution Architecture
 
-To protect intellectual property and optimize execution performance on the Raspberry Pi (Cortex-A76), Hermes is compiled ahead-of-time (AOT) using **Nuitka**:
+To protect intellectual property, secure device credentials, and optimize execution performance on the Raspberry Pi (Cortex-A76), Hermes is compiled ahead-of-time (AOT) per-client using **Nuitka**:
 
 ```
-GitHub Push (main / v*)
-       │
-       ▼
-GitHub Actions Runner (ubuntu-26.04-arm)
-       ├── 1. Compiler Toolchain: clang, ccache, patchelf
+Developer Machine / Target Pi
+       ├── 1. Configure Client Parameters in src/config/client_config.py
+       │      (Set DEVICE_ID, DEVICE_KEY, CENTER_ID, MIN_WEIGHT, ANPR_SERVER_URL, baseline URLs)
        ├── 2. Verification Gate: uv run pytest
-       ├── 3. Nuitka Compile: python -m nuitka --module --include-package=src src
-       │      └── Generates: compiled_dist/src.*.so (ELF 64-bit LSB shared object, ARM aarch64)
-       ├── 4. Import & Template Test: Verifies Flask template path and core configs
-       └── 5. Deployment: Orphan Branch force-push (release-arm64)
+       ├── 3. Local Nuitka Compile: uv run python scripts/build.py
+       │      └── Generates: compiled_dist/src.*.so (ELF 64-bit LSB shared object)
+       └── 4. Deployment Package:
               ├── src.*.so (Compiled C-extension module)
               ├── main.py (Application bootstrap & graceful shutdown handler)
               ├── src/web/templates/ (HTML5 diagnostics UI)
@@ -323,23 +327,25 @@ When `uv run python main.py` is invoked on the edge device:
 
 ## 10. System Configuration & Environment Variables
 
-Runtime settings live in `config.json`, which is **gitignored** and **auto-created** with safe defaults on first run if missing. Settings can be updated directly in JSON or via the web dashboard (`POST /api/config`).
+Hermes uses a dual-layer configuration pattern:
+1. **Compiled & Immutable (`src/config/client_config.py`)**: Values baked into native binary; non-configurable via the Web UI.
+2. **Runtime Overrides (`data/hermes.db`)**: Field settings configurable by on-site technicians via the Web UI (:8080) and persisted in SQLite.
 
-### 10.1 Configuration Keys (`config.json`)
+### 10.1 Configuration Scope Breakdown
 
-| Key | Type | Default | Description |
+| Parameter | Location | UI Configurable? | Description |
 | :--- | :--- | :--- | :--- |
-| `anpr_server_url` | string | `http://127.0.0.1:8000/recognize` | HTTP POST endpoint of the Argus ANPR microservice. |
-| `anpr_camera_url` | string | `http://192.168.1.101/snapshot.jpg` | Snapshot URL of License Plate Camera 1. |
-| `auxiliary_camera_urls` | list[str] | `["http://192.168.1.102/snapshot.jpg"]` | Snapshot URLs of overview context cameras (2..N). |
-| `serial_port` | string | `/dev/ttyAMA0` | Hardware UART serial port connected to weigh scale. |
-| `serial_baudrate` | integer | `1200` | Baud rate for serial communication (typically 1200, 8N1). |
-| `weight_threshold` | float | `50.0` | Minimum weight in kg to trigger active weighing session. |
-| `center_id` | integer | `1` | Collection center identifier for Gluvok Cloud API. |
-| `device_id` | integer | `1` | Primary key of the edge device in Gluvok `devices` table. |
-| `device_key` | string | `""` | Pre-shared key for stateless device header authentication. |
-| `ssid` | string | `""` | Facility Wi-Fi SSID for automated connection and watchdog. |
-| `password` | string | `""` | Facility Wi-Fi WPA2 pre-shared password. |
+| `device_id` | `client_config.py` | ❌ No (Compiled) | Primary edge device identifier for Gluvok Cloud API. |
+| `device_key` | `client_config.py` | ❌ No (Compiled) | Pre-shared key for stateless device header authentication. |
+| `center_id` | `client_config.py` | ❌ No (Compiled) | Collection center identifier for Gluvok Cloud API. |
+| `min_weight` | `client_config.py` | ❌ No (Compiled) | Minimum threshold weight in kg to trigger active weighing. |
+| `anpr_server_url` | `client_config.py` | ❌ No (Compiled) | HTTP POST endpoint of the Argus ANPR microservice. |
+| `serial_port` | Baseline / SQLite | ✅ Yes (`/config`) | UART serial port connected to weigh scale (e.g. `/dev/ttyUSB0`). |
+| `serial_baudrate` | Baseline / SQLite | ✅ Yes (`/config`) | Baud rate for serial communication (typically `1200`, `9600`). |
+| `anpr_camera_urls` | Baseline / SQLite | ✅ Yes (`/config`) | Snapshot URLs of License Plate Cameras (Front, Rear). |
+| `auxiliary_camera_urls` | Baseline / SQLite | ✅ Yes (`/config`) | Snapshot URLs of overview context cameras (2..N). |
+| `wifi_ssid` | Baseline / SQLite | ✅ Yes (`/wifi`) | Facility Wi-Fi SSID. |
+| `wifi_password` | Baseline / SQLite | ✅ Yes (`/wifi`) | Facility Wi-Fi passphrase. |
 
 ### 10.2 Environment Variables
 

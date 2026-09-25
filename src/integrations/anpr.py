@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 import requests
 
-from src.config.config_manager import config
+from src.config import config
 from src.config.constants import ANPR_SERVER_TIMEOUT
 
 logger = logging.getLogger(__name__)

@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from src.config.config_manager import config
+from src.config import config
 from src.config.constants import (
     CAMERA_TIMEOUT,
     MAX_PARALLEL_CAMERA_WORKERS,

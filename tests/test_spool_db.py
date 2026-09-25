@@ -6,7 +6,6 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from src.config.config_manager import config
 from src.core.db import (
     acquire_next_spool_task,
     get_spool_images,
@@ -34,17 +33,7 @@ class TestSpoolDB(unittest.TestCase):
         init_db(self.db_path)
         reset_db()
 
-        self.orig_device_id = config.device_id
-        self.orig_device_key = config.device_key
-        self.orig_center_id = config.center_id
-        config.device_id = "pi1"
-        config.device_key = "hardware123"
-        config.center_id = 1
-
     def tearDown(self):
-        config.device_id = self.orig_device_id
-        config.device_key = self.orig_device_key
-        config.center_id = self.orig_center_id
         reset_db()
         self.temp_dir.cleanup()
         reset_telemetry()

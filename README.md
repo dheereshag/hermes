@@ -26,11 +26,12 @@ Click any file below to open it directly in the IDE:
 ```
 hermes/
 ├── [main.py](file:///Users/d/Downloads/hermes/main.py)                    # Application entry point, setup, and loop
-├── config.json                # Runtime hardware & cloud config (gitignored; auto-created on first run)
 ├── [pyproject.toml](file:///Users/d/Downloads/hermes/pyproject.toml)             # Project definition, dependencies, and test config (uv-managed)
 ├── [uv.lock](file:///Users/d/Downloads/hermes/uv.lock)                    # Dependency lockfile
 ├── [README.md](file:///Users/d/Downloads/hermes/README.md)                  # Executive project overview and runbook
 ├── [AGENTS.md](file:///Users/d/Downloads/hermes/AGENTS.md)                  # Code quality, linting, typing, and architectural rules
+├── scripts/
+│   └── [build.py](file:///Users/d/Downloads/hermes/scripts/build.py)                   # Local Nuitka compilation script for bespoke client builds
 ├── docs/
 │   ├── [ARCHITECTURE.md](file:///Users/d/Downloads/hermes/docs/ARCHITECTURE.md)        # Hardware architecture, protocols, and sequence flows
 │   └── [CODEBASE_REFERENCE.md](file:///Users/d/Downloads/hermes/docs/CODEBASE_REFERENCE.md)  # Exhaustive function-by-function developer guide
@@ -46,9 +47,12 @@ hermes/
 │   └── [test_wifi_manager.py](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py)   # Wi-Fi watchdog & emergency hotspot fallback tests
 └── src/
     ├── config/
-    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/config/__init__.py)         # Subpackage exports
-    │   ├── [config_manager.py](file:///Users/d/Downloads/hermes/src/config/config_manager.py)  # JSON-backed configuration manager singleton (thread-safe RLock)
-    │   └── [constants.py](file:///Users/d/Downloads/hermes/src/config/constants.py)       # System timing, timeout constants, buffer sizes & regexes
+    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/config/__init__.py)         # Subpackage exports (`config`, `ConfigManager`)
+    │   ├── [client_config.py](file:///Users/d/Downloads/hermes/src/config/client_config.py)   # Bespoke compiled client configuration (credentials, IDs, URLs)
+    │   ├── [constants.py](file:///Users/d/Downloads/hermes/src/config/constants.py)       # System timing, timeout constants, buffer sizes & regexes
+    │   ├── [manager.py](file:///Users/d/Downloads/hermes/src/config/manager.py)         # Unified thread-safe ConfigManager accessor
+    │   ├── [runtime.py](file:///Users/d/Downloads/hermes/src/config/runtime.py)         # Runtime configuration override mutator
+    │   └── [store.py](file:///Users/d/Downloads/hermes/src/config/store.py)           # SQLite persistence for runtime overrides (`data/hermes.db`)
     ├── core/
     │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/core/__init__.py)           # Subpackage exports
     │   ├── [db.py](file:///Users/d/Downloads/hermes/src/core/db.py)                       # SQLite WAL durable outbox store with atomic lease locking
@@ -96,42 +100,25 @@ uv run ruff check --fix
 uv run ty check
 uv run pytest
 
-# 3. Start controller (config.json is auto-created on first run)
+# 3. Start controller using client_config.py
 uv run python main.py
 ```
 
 ---
 
-### 2. Nuitka Run (Compiled ARM64 / Production)
+### 2. Bespoke Client Build with Nuitka (Compiled Native Module / Production)
 
-Use this mode for edge deployment on Raspberry Pi with core logic compiled into a native C-extension (`src.*.so`):
-
-#### Option A: Pull Pre-Compiled Release (Raspberry Pi Edge Deployment)
-The automated CI pipeline compiles and pushes production-ready ARM64 binaries to the `release-arm64` orphan branch:
+For deploying to client weighbridge hardware (Raspberry Pi or Linux), sensitive client credentials and core architecture are compiled into a native C-extension shared library (`src.*.so`):
 
 ```bash
-git clone -b release-arm64 https://github.com/dheereshag/hermes.git
-cd hermes
-uv sync
-uv run python main.py
-```
+# 1. Configure bespoke client parameters in src/config/client_config.py
+# (Set DEVICE_ID, DEVICE_KEY, CENTER_ID, MIN_WEIGHT, ANPR_SERVER_URL, and baseline URLs)
 
-#### Option B: Compile Locally with Nuitka
-To compile the `src/` package locally into a shared object:
+# 2. Compile src/ package into native shared library
+uv run python scripts/build.py
 
-```bash
-# Compile core package into native shared library
-uv run python -m nuitka \
-  --module \
-  --include-package=src \
-  --nofollow-imports \
-  --remove-output \
-  --lto=yes \
-  --python-flag=no_docstrings \
-  --output-dir=. \
-  src
-
-# Run application using compiled binary
+# 3. Copy compiled shared library and run
+cp compiled_dist/src*.so .
 uv run python main.py
 ```
 

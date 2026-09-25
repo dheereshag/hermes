@@ -9,11 +9,14 @@ Welcome to the **Hermes Weighbridge & ANPR Integration Controller** maintainer m
 1. [System Overview & Physical Hardware Context](#1-system-overview--physical-hardware-context)
 2. [Root Configuration & Entry Point](#2-root-configuration--entry-point)
    - [`main.py`](#mainpy)
-   - [`config.json`](#configjson)
+   - [`scripts/build.py`](#scriptsbuildpy)
    - [`pyproject.toml` & `uv.lock`](#pyprojecttoml--uvlock)
 3. [Configuration Subsystem (`src/config/`)](#3-configuration-subsystem-srcconfig)
-   - [`config_manager.py`](#srcconfigconfig_managerpy)
+   - [`client_config.py`](#srcconfigclient_configpy)
    - [`constants.py`](#srcconfigconstantspy)
+   - [`store.py`](#srcconfigstorepy)
+   - [`runtime.py`](#srcconfigruntimepy)
+   - [`manager.py`](#srcconfigmanagerpy)
 4. [Core Logic Subsystem (`src/core/`)](#4-core-logic-subsystem-srccore)
    - [`session.py`](#srccoresessionpy)
    - [`stability.py`](#srccorestabilitypy)
@@ -87,31 +90,17 @@ Application lifecycle entry point and process daemon runner.
   1. Starts `ScaleUARTReader` background thread listening on configured port/baud.
   2. Launches `FallbackWebServer` on port `8080` serving the diagnostics UI.
   3. Starts `start_wifi_watchdog(interval=30.0)` for emergency hotspot failover.
-  4. Validates edge device credentials (`device_id`, `device_key`) in `config.json`.
+  4. Validates edge device credentials (`device_id`, `device_key`) in `client_config.py`.
 - **`loop() -> None`**:
   Main execution tick running every 1 second:
   - Invokes `session_manager.check_session_progress()`. If a post-stabilization countdown has elapsed, dispatches `scale_state_machine._trigger_upload(completed_package)`.
   - Ensures timely finalization even if the scale UART pauses transmission.
 
-### `config.json`
-Local JSON file storing persistent configuration. Managed automatically by `ConfigManager`:
-```json
-{
-  "ssid": "Facility_WiFi_SSID",
-  "password": "WiFi_WPA_Password",
-  "center_id": 1,
-  "min_weight": 50.0,
-  "device_id": 1,
-  "device_key": "hardware123",
-  "anpr_server_url": "http://127.0.0.1:8000/recognize",
-  "serial_port": "/dev/ttyAMA0",
-  "serial_baudrate": 1200,
-  "anpr_camera_url": "http://192.168.1.101/cgi-bin/snapshot.cgi",
-  "auxiliary_camera_urls": [
-    "http://192.168.1.102/cgi-bin/snapshot.cgi"
-  ]
-}
-```
+### `scripts/build.py`
+Local Nuitka compilation runner for bespoke client deployments:
+- Compiles `src/` into a native shared library (`src.*.so`) using clang and LTO (`--lto=yes`).
+- Strips Python docstrings (`--python-flag=no_docstrings`) for IP protection and size reduction.
+- Targets ARM64 (Raspberry Pi 5) or Linux x86_64 edge environments.
 
 ### `pyproject.toml` & `uv.lock`
 Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv/):
@@ -120,42 +109,38 @@ Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv
 - `requests`: HTTP client for Argus ANPR and Gluvok Cloud API.
 - `flask`: Application factory and REST API for local diagnostics.
 - `python-periphery`: Pure-Python Linux GPIO/cdev control for RGB LED state indicator.
-- `pytest`, `ruff`, `ty`: Development verification gates.
+- `nuitka`, `pytest`, `ruff`, `ty`: Development and compilation toolchain.
 
 ---
 
 ## 3. Configuration Subsystem (`src/config/`)
 
-### `src/config/config_manager.py`
-Singleton managing configuration loading, fallback defaults, thread-safe access (`threading.RLock`), dynamic camera getters, and JSON disk persistence (`load_settings` / `_persist`).
+Hermes employs a dual-layer configuration pattern adhering to NASA JPL Rule 4 (≤ 60 lines per file):
 
-#### Class: `ConfigManager`
-- **Attributes**:
-  - `file_path`: Absolute path to `config.json`.
-  - `wifi_ssid`: Stored facility Wi-Fi network SSID.
-  - `wifi_password`: WPA/WPA2 passphrase.
-  - `center_id`: Numeric identifier for the physical weighing center.
-  - `weight_threshold`: Minimum weight (kg) required to trigger a weighing session (default: `50.0 kg`).
-  - `device_id`: Integer primary key of the edge device from Gluvok's `devices` table (default: `1`).
-  - `device_key`: Pre-shared secret key string for stateless header authentication.
-  - `anpr_server_url`: Override URL for Argus ANPR (default: `""`).
-  - `serial_port`: Path to UART character device (default: `"/dev/ttyAMA0"`).
-  - `serial_baudrate`: Serial communication speed (default: `1200`).
-  - `anpr_camera_url`: Snapshot URL for Camera 1.
-  - `auxiliary_camera_urls`: List of snapshot URLs for Cameras 2..N.
-- **Methods**:
-  - **`__init__(file_path=CONFIG_FILE_PATH)`**: Initializes default values, creates recursive lock, and calls `load_settings()`.
-  - **`load_settings() -> None`**: Reads `config.json`. If missing, creates a default template.
-  - **`_build_data_dict() -> dict[str, Any]`**: Assembles current in-memory fields into a clean dictionary.
-  - **`_persist() -> None`**: Writes data dictionary to `config.json` with 2-space indentation under lock.
-  - **`save_settings(...) -> None`**: High-level method to update Wi-Fi, Center ID, weight threshold, and device credentials.
-  - **`update_system_config(...) -> None`**: Live reconfiguration of hardware parameters (threshold, port, baud, camera URLs).
-  - **`update_device_credentials(device_id: int, device_key: str) -> None`**: Updates edge device credentials.
-  - **`update_wifi_credentials(ssid: str, password: str) -> None`**: Updates network credentials.
-  - **`clear_wifi_credentials() -> None`**: Clears Wi-Fi credentials to trigger emergency AP mode.
-  - **`get_anpr_camera_url() -> str`**: Returns active ANPR camera snapshot URL.
-  - **`get_auxiliary_camera_urls() -> list[str]`**: Returns list of active auxiliary camera URLs.
-  - **`get_anpr_server_url() -> str`**: Returns configured ANPR endpoint or default (`http://127.0.0.1:8000/recognize`).
+### `src/config/client_config.py`
+Bespoke compiled client deployment constants:
+- **`DEVICE_ID`**: Edge device identifier for Gluvok Cloud API.
+- **`DEVICE_KEY`**: Pre-shared secret key string for stateless header authentication.
+- **`CENTER_ID`**: Collection center identifier.
+- **`MIN_WEIGHT`**: Minimum weight (kg) required to trigger a weighing session.
+- **`ANPR_SERVER_URL`**: Argus ANPR microservice endpoint.
+- **Baseline Hardware & Wi-Fi Settings**: Initial fallback values for serial port, baudrate, cameras, and Wi-Fi.
+
+### `src/config/constants.py`
+System-wide operational constants, timeouts, buffer sizes, and Indian vehicle registration regex (`INDIAN_PLATE_REGEX`).
+
+### `src/config/store.py`
+Thread-safe SQLite storage for the `runtime_config` table in `data/hermes.db`. Persists on-site technician adjustments across reboots without writing to Python source code.
+
+### `src/config/runtime.py`
+Mutator handling runtime updates (`update_system`, `update_wifi`, `clear_wifi`) with `threading.RLock()` synchronization.
+
+### `src/config/manager.py`
+Unified `ConfigManager` singleton combining compiled client defaults with active SQLite runtime overrides:
+- **`load_settings() -> None`**: Reloads active overrides from SQLite.
+- **`update_system_config(...) -> None`**: Updates serial and camera settings in SQLite.
+- **`update_wifi_credentials(ssid: str, password: str) -> None`**: Updates Wi-Fi settings in SQLite.
+- **`clear_wifi_credentials() -> None`**: Clears Wi-Fi credentials in SQLite.
 - **Global**: `config = ConfigManager()` (Singleton used across all modules).
 
 ### `src/config/constants.py`
@@ -377,11 +362,11 @@ REST API endpoints.
 - **`GET /api/config`** *(Protected: `@auth_required`)*:
   Returns active threshold weight, serial settings, and camera URLs. Requires superadmin session token.
 - **`POST /api/config`** *(Protected: `@auth_required`)*:
-  Validates payload via `validate_config_payload`. Updates `config.json`. Dynamically restarts UART serial reader if port or baudrate was modified.
+  Validates payload via `validate_config_payload`. Updates runtime settings in SQLite (`data/hermes.db`). Rejects attempts to alter compiled client parameters (`center_id`, `min_weight`, `anpr_server_url`, `device_id`, `device_key`). Dynamically restarts UART serial reader if port or baudrate was modified.
 - **`POST /api/wifi`** *(Protected: `@auth_required`)*:
-  Saves SSID and password to configuration, then attempts immediate connection via `wifi.connect_to_wifi()`.
+  Saves SSID and password to SQLite runtime store, then attempts immediate connection via `wifi.connect_to_wifi()`.
 - **`POST /api/wifi/clear`** *(Protected: `@auth_required`)*:
-  Clears stored credentials from `config.json`.
+  Clears stored credentials in SQLite runtime store.
 
 ### `src/web/auth.py`
 Authentication and security middleware.

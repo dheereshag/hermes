@@ -14,7 +14,7 @@ from typing import Any
 
 import requests
 
-from src.config.config_manager import config
+from src.config import config
 from src.config.constants import (
     CLOUD_POST_TIMEOUT,
     GLUVOK_BASE_URL,
