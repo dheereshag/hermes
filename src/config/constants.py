@@ -25,9 +25,9 @@ DEFAULT_AUXILIARY_CAMERA_URLS = [
     "http://192.168.1.104/cgi-bin/snapshot.cgi",
 ]
 
-HOTSPOT_CON_NAME = "Gluvok-Hotspot"
-DEFAULT_HOTSPOT_SSID = "Gluvok-Setup"
-DEFAULT_HOTSPOT_PASS = "gluvok1234"
+HOTSPOT_CON_NAME = "hermes-hotspot"
+DEFAULT_HOTSPOT_SSID = "hermes"
+DEFAULT_HOTSPOT_PASS = "12345678"
 DEFAULT_WIFI_WATCHDOG_INTERVAL = 30.0
 
 GLUVOK_BASE_URL = "https://gluvok.vercel.app"

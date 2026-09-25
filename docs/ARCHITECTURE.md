@@ -55,7 +55,7 @@ graph TD
 - **Non-Blocking Real-Time Threading**: Scale serial reading is completely decoupled from disk spooling and network I/O; cloud uploads and camera captures are dispatched in dedicated background threads.
 - **Gluvok Cloud API Multipart Integration**: Matches curl specification (`curl -X POST ... -u "pi1:hardware123" -F "center_id=..." -F "detected_vehicle_number=..." -F "weight=..." -F "file=@..."`).
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` displaying live scale weight, ANPR status, cloud spool queue counts, error monitoring, and configuration.
-- **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`Gluvok-Setup`) for on-site recovery.
+- **Emergency Wi-Fi Hotspot Fallback**: Detects network disconnections via NetworkManager (`nmcli`) and automatically starts an emergency AP (`hermes`) for on-site recovery.
 
 ---
 
@@ -162,7 +162,7 @@ hermes/
   - Concurrently captures overview angles (Cameras 2..N) upon stabilization using a bounded `ThreadPoolExecutor`.
 - **`WiFi Manager` (`wifi.py`)**:
   - Continuously monitors active Wi-Fi connection via `nmcli`.
-  - Automatically spins up an emergency Wi-Fi Access Point (`Gluvok-Setup` / `gluvok1234`) on `wlan0` if connection to the facility router is lost, allowing on-site technicians to connect directly.
+  - Automatically spins up an emergency Wi-Fi Access Point (`hermes` / `12345678`) on the wireless interface if connection to the facility router is lost, allowing on-site technicians to connect directly.
 
 ### 5.3 External Integrations (`src/integrations/`)
 - **`Argus ANPR Client` (`anpr.py`)**:

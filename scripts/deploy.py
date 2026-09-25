@@ -17,7 +17,6 @@ def run_cmd(cmd: list[str]) -> None:
 
 
 def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/client.lic") -> None:
-    user = host.split("@")[0] if "@" in host else "gluvok"
     print(f"[Deploy] 1. Preparing {target} on {host}...")
     prep = f"sudo mkdir -p {target} && sudo chown -R $USER:$USER {target}; export PATH=\"$HOME/.local/bin:$PATH\"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh"
     run_cmd(["ssh", "-t", host, prep])
@@ -31,7 +30,7 @@ def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/clien
     )
     run_cmd(["ssh", "-t", host, build])
     print("[Deploy] 4. Provisioning systemd service & client license...")
-    svc = f"[Unit]\nDescription=Hermes\nAfter=network-online.target\n[Service]\nType=simple\nUser={user}\nWorkingDirectory={target}\nExecStart={target}/run.sh\nRestart=always\nRestartSec=5\nEnvironment=PYTHONUNBUFFERED=1\n[Install]\nWantedBy=multi-user.target\n"
+    svc = f"[Unit]\nDescription=Hermes\nAfter=network-online.target\n[Service]\nType=simple\nUser=root\nWorkingDirectory={target}\nExecStart={target}/run.sh\nRestart=always\nRestartSec=5\nEnvironment=PYTHONUNBUFFERED=1\n[Install]\nWantedBy=multi-user.target\n"
     os.makedirs("dist", exist_ok=True)
     with open("dist/hermes.service", "w", encoding="utf-8") as f: f.write(svc)
     run_cmd(["scp", "dist/hermes.service", f"{host}:/tmp/hermes.service"])

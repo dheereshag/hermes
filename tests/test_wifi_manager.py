@@ -43,7 +43,7 @@ class TestWiFiManager(unittest.TestCase):
     def test_is_wifi_connected_false_when_in_hotspot_mode(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
-        mock_res.stdout = "wifi:connected:Gluvok-Hotspot\n"
+        mock_res.stdout = "wifi:connected:hermes-hotspot\n"
         mock_run.return_value = mock_res
 
         # If connected connection is the hotspot itself, it shouldn't count as normal wifi
@@ -57,7 +57,7 @@ class TestWiFiManager(unittest.TestCase):
         mock_run.return_value = mock_res
 
         # Start hotspot
-        success = start_emergency_hotspot("Gluvok-Setup", "gluvok1234")
+        success = start_emergency_hotspot("hermes", "12345678")
         self.assertTrue(success)
         self.assertTrue(is_hotspot_active())
 
@@ -131,7 +131,7 @@ class TestWiFiManager(unittest.TestCase):
             4, ["nmcli", "connection", "add"], stderr="Insufficient privileges"
         )
         with self.assertLogs("src.devices.wifi", level="ERROR") as cm:
-            success = start_emergency_hotspot("Gluvok-Setup", "gluvok1234")
+            success = start_emergency_hotspot("hermes", "12345678")
             self.assertFalse(success)
             self.assertTrue(any("Insufficient privileges" in msg for msg in cm.output))
 

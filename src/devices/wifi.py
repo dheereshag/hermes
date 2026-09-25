@@ -2,7 +2,7 @@
 wifi.py — Raspberry Pi Wi-Fi & Emergency Hotspot Driver
 ======================================================
 Manages Raspberry Pi Wi-Fi connectivity and automatic emergency Access Point (Hotspot) fallback.
-Uses NetworkManager (nmcli) to detect connection drops and spin up the 'Gluvok-Setup' hotspot.
+Uses NetworkManager (nmcli) to detect connection drops and spin up the 'hermes' hotspot.
 """
 
 from __future__ import annotations
@@ -165,7 +165,7 @@ def start_emergency_hotspot(
 ) -> bool:
     """
     Starts the emergency Wi-Fi Access Point (Hotspot) using nmcli.
-    Broadcasts 'Gluvok-Setup' with default IP 10.42.0.1.
+    Broadcasts 'hermes' with default IP 10.42.0.1.
     """
     global _hotspot_active
     with _wifi_lock:

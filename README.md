@@ -108,6 +108,7 @@ cd /opt/hermes && ./run.sh
 ## 🖥️ Web Diagnostics Dashboard
 
 - **URL**: `http://localhost:8080` (or `http://<pi-ip>:8080`)
+- **Emergency Hotspot AP**: `hermes` (Password: `12345678` | Fallback Portal: `http://10.42.0.1:8080`)
 - **Default Superadmin User**: `superadmin`
 - **Default Superadmin Password**: `Gluvok@241821`
 

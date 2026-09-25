@@ -160,9 +160,9 @@ Centralized repository of timing windows, timeouts, buffer boundaries, NetworkMa
   - `MAX_PARALLEL_CAMERA_WORKERS = 4`: Auxiliary camera snapshot thread pool worker cap.
 - **Cloud & Network Timings**:
   - `CLOUD_POST_TIMEOUT = 20.0`: Maximum timeout for Gluvok cloud JSON payload upload.
-  - `HOTSPOT_CON_NAME = "Gluvok-Hotspot"`: NetworkManager emergency profile name.
-  - `DEFAULT_HOTSPOT_SSID = "Gluvok-Setup"`: Default hotspot SSID.
-  - `DEFAULT_HOTSPOT_PASS = "gluvok1234"`: Default hotspot WPA2 passphrase.
+  - `HOTSPOT_CON_NAME = "hermes-hotspot"`: NetworkManager emergency profile name.
+  - `DEFAULT_HOTSPOT_SSID = "hermes"`: Default hotspot SSID.
+  - `DEFAULT_HOTSPOT_PASS = "12345678"`: Default hotspot WPA2 passphrase.
   - `WIFI_WATCHDOG_INTERVAL = 30.0`: Wi-Fi connectivity poll interval.
 - **Regexes & URLs**:
   - `GLUVOK_BASE_URL = "https://gluvok.vercel.app"`: Production cloud backend endpoint.
