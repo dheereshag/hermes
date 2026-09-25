@@ -748,20 +748,7 @@
       }
     }
 
-    function switchTab(tabId) {
-      if (tabId === "admin") tabId = "config";
-      activeTab = tabId;
-      window.location.hash = tabId;
-
-      // Close mobile sidebar if open
-      const sidebar = document.getElementById("main-sidebar");
-      const backdrop = document.getElementById("sidebar-backdrop");
-      if (window.innerWidth < 1024) {
-        sidebar.classList.add("-translate-x-full");
-        backdrop.classList.add("hidden");
-      }
-
-      // Update breadcrumbs
+    function updateBreadcrumb(tabId) {
       const groups = {
         overview: "Platform",
         scale: "Platform",
@@ -778,11 +765,30 @@
         cloud: "Cloud Transfer",
         wifi: "Wi-Fi Setup",
         telemetry: "Telemetry Logs",
-        config: "System Config"
+        config: "System Config",
       };
       const parentEl = document.getElementById("breadcrumb-parent");
       if (parentEl) parentEl.textContent = groups[tabId] || "Platform";
-      document.getElementById("breadcrumb-current-tab").textContent = titles[tabId] || tabId;
+      const curTab = document.getElementById("breadcrumb-current-tab");
+      if (curTab) curTab.textContent = titles[tabId] || tabId;
+    }
+
+    function switchTab(tabId, updateHash = true) {
+      if (tabId === "admin") tabId = "config";
+      activeTab = tabId;
+      if (updateHash && window.location.hash.replace(/^#\/?/, "") !== tabId) {
+        window.location.hash = tabId;
+      }
+
+      // Close mobile sidebar if open
+      const sidebar = document.getElementById("main-sidebar");
+      const backdrop = document.getElementById("sidebar-backdrop");
+      if (window.innerWidth < 1024) {
+        sidebar?.classList.add("-translate-x-full");
+        backdrop?.classList.add("hidden");
+      }
+
+      updateBreadcrumb(tabId);
 
       // Toggle views
       const tabs = ["overview", "scale", "anpr", "cloud", "wifi", "telemetry", "config"];
@@ -791,11 +797,9 @@
         const navBtn = document.getElementById("nav-item-" + t);
         if (view) view.classList.toggle("hidden", t !== tabId);
         if (navBtn) {
-          if (t === tabId) {
-            navBtn.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold bg-sidebar-accent text-sidebar-accent-foreground transition shadow-sm";
-          } else {
-            navBtn.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition";
-          }
+          navBtn.className = t === tabId
+            ? "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold bg-sidebar-accent text-sidebar-accent-foreground transition shadow-sm"
+            : "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition";
         }
       });
 
@@ -1465,13 +1469,30 @@
       }
     }
 
-    // Initialize
-    const initialHash = window.location.hash.replace("#", "") || window.location.pathname.replace("/", "");
-    if (["scale", "anpr", "cloud", "wifi", "telemetry", "config", "admin"].includes(initialHash)) {
-      switchTab(initialHash);
-    } else {
-      switchTab("overview");
+    function getTabFromUrl() {
+      const hash = window.location.hash.replace(/^#\/?/, "");
+      if (["scale", "anpr", "cloud", "wifi", "telemetry", "config", "admin"].includes(hash)) {
+        return hash === "admin" ? "config" : hash;
+      }
+      const path = window.location.pathname.replace(/^\//, "");
+      if (["scale", "anpr", "cloud", "wifi", "telemetry", "config", "admin"].includes(path)) {
+        return path === "admin" ? "config" : path;
+      }
+      return "overview";
     }
+
+    function syncTabFromUrl() {
+      const target = getTabFromUrl();
+      if (target !== activeTab) {
+        switchTab(target, false);
+      }
+    }
+
+    window.addEventListener("hashchange", syncTabFromUrl);
+    window.addEventListener("popstate", syncTabFromUrl);
+
+    // Initialize view from URL hash or path
+    switchTab(getTabFromUrl(), false);
 
     // Wi-Fi form auto-dismiss vault badge on input
     document.getElementById("wifi-ssid")?.addEventListener("input", () => {

@@ -58,6 +58,9 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("handleAdminLogin", html)
         self.assertNotIn('id="wifi-login-overlay"', html)
         self.assertNotIn('id="config-login-overlay"', html)
+        self.assertIn("syncTabFromUrl", html)
+        self.assertIn("hashchange", html)
+        self.assertIn("popstate", html)
 
     def test_static_assets_served(self):
         res_tw = self.client.get("/static/tailwindcss.js")
