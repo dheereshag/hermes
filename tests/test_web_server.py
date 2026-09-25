@@ -96,6 +96,63 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.wifi_ssid, "TestRouter_5G")
         self.assertEqual(config.wifi_password, "SecretPassword123")
 
+    def test_post_api_wifi_saves_to_vault_and_allows_reconnect_without_password(self):
+        # 1. Save network with password
+        res = self.client.post(
+            "/api/wifi",
+            data=json.dumps({"ssid": "Vault_Net", "password": "VaultSecret999"}),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        # 2. Query /api/wifi/saved
+        saved_res = self.client.get("/api/wifi/saved")
+        self.assertEqual(saved_res.status_code, 200)
+        saved_data = saved_res.get_json()
+        self.assertTrue(saved_data.get("success"))
+        ssids = [n["ssid"] for n in saved_data.get("networks", [])]
+        self.assertIn("Vault_Net", ssids)
+        for net in saved_data["networks"]:
+            self.assertNotIn("password", net)
+
+        # 3. 1-click Reconnect without providing password
+        reconnect_res = self.client.post(
+            "/api/wifi",
+            data=json.dumps({"ssid": "Vault_Net", "password": ""}),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
+        )
+        self.assertEqual(reconnect_res.status_code, 200)
+        self.assertEqual(config.wifi_password, "VaultSecret999")
+
+    def test_delete_saved_wifi_network(self):
+        # Seed network
+        self.client.post(
+            "/api/wifi",
+            data=json.dumps({"ssid": "Delete_Me", "password": "SecretPassword"}),
+            headers={"X-Auth-Token": self.auth_token},
+            content_type="application/json",
+        )
+        # Delete network
+        del_res = self.client.delete(
+            "/api/wifi/saved/Delete_Me",
+            headers={"X-Auth-Token": self.auth_token},
+        )
+        self.assertEqual(del_res.status_code, 200)
+
+        # Confirm gone
+        saved_res = self.client.get("/api/wifi/saved")
+        ssids = [n["ssid"] for n in saved_res.get_json().get("networks", [])]
+        self.assertNotIn("Delete_Me", ssids)
+
+        # Delete non-existent returns 404
+        del_res404 = self.client.delete(
+            "/api/wifi/saved/NonExistent",
+            headers={"X-Auth-Token": self.auth_token},
+        )
+        self.assertEqual(del_res404.status_code, 404)
+
     def test_post_api_wifi_empty_ssid_error(self):
         payload = {"ssid": "", "password": "password"}
         res = self.client.post(
@@ -196,6 +253,31 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(res.status_code, 404)
         data = res.get_json()
         self.assertIn("error", data)
+
+    def test_check_argus_online_root_endpoint(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.web.blueprints.api import _check_argus_online
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"name": "Argus ANPR", "status": "running"}
+
+        with patch("requests.get", return_value=mock_resp) as mock_get:
+            online = _check_argus_online("http://127.0.0.1:8000/recognize")
+            self.assertTrue(online)
+            mock_get.assert_called_with("http://127.0.0.1:8000/", timeout=1.5)
+
+    def test_check_argus_online_offline(self):
+        from unittest.mock import patch
+
+        import requests
+
+        from src.web.blueprints.api import _check_argus_online
+
+        with patch("requests.get", side_effect=requests.RequestException("Connection refused")):
+            online = _check_argus_online("http://127.0.0.1:8000/recognize")
+            self.assertFalse(online)
 
     def test_server_lifecycle(self):
         server = FallbackWebServer(host="127.0.0.1", port=8991)

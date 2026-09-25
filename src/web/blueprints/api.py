@@ -30,11 +30,14 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
 def _check_argus_online(anpr_url: str) -> bool:
-    """Checks if Argus ANPR microservice health endpoint is reachable."""
-    health_url = anpr_url.replace("/recognize", "/health")
+    """Checks if Argus ANPR microservice is reachable via root or health endpoint."""
+    base_url = anpr_url.replace("/recognize", "").rstrip("/") or "http://127.0.0.1:8000"
     try:
-        r = requests.get(health_url, timeout=1.5)
-        return r.status_code == 200
+        r = requests.get(f"{base_url}/", timeout=1.5)
+        if r.status_code == 200:
+            return True
+        r_health = requests.get(f"{base_url}/health", timeout=1.5)
+        return r_health.status_code == 200
     except requests.RequestException:
         return False
 
@@ -183,6 +186,26 @@ def post_config():
     }), 200
 
 
+@api_bp.route("/wifi/saved", methods=["GET"])
+def get_saved_wifi():
+    """Returns saved Wi-Fi networks (SSID and metadata, no passwords)."""
+    from src.core.wifi_vault import get_saved_wifi_networks
+    networks = get_saved_wifi_networks()
+    return jsonify({"success": True, "networks": networks}), 200
+
+
+@api_bp.route("/wifi/saved/<path:ssid>", methods=["DELETE"])
+@auth_required
+def delete_saved_wifi(ssid: str):
+    """Deletes a saved Wi-Fi network from the persistent vault."""
+    from src.core.wifi_vault import delete_saved_wifi_network
+    deleted = delete_saved_wifi_network(ssid)
+    if deleted:
+        record_system_event("CONFIG", f"Removed network '{ssid}' from saved Wi-Fi vault.")
+        return jsonify({"success": True, "message": f"Network '{ssid}' removed."}), 200
+    return jsonify({"success": False, "error": f"Network '{ssid}' not found."}), 404
+
+
 @api_bp.route("/wifi", methods=["POST"])
 @auth_required
 def post_wifi():
@@ -193,6 +216,17 @@ def post_wifi():
 
     if not ssid:
         return jsonify({"success": False, "error": "SSID cannot be empty"}), 400
+
+    from src.core.wifi_vault import get_wifi_password, save_wifi_network
+
+    # If no password provided, check if network is already saved in vault
+    if not password:
+        stored_password = get_wifi_password(ssid)
+        if stored_password:
+            password = stored_password
+
+    if password:
+        save_wifi_network(ssid, password)
 
     config.update_wifi_credentials(ssid, password)
     record_system_event("CONFIG", f"Saved Wi-Fi SSID '{ssid}' to persistent storage. Attempting connection...")
@@ -217,8 +251,10 @@ def post_wifi():
 @api_bp.route("/wifi/clear", methods=["POST"])
 @auth_required
 def post_wifi_clear():
-    """Clears saved Wi-Fi credentials from persistent storage."""
+    """Clears saved Wi-Fi credentials from persistent storage and vault."""
+    from src.core.wifi_vault import clear_saved_wifi_networks
     config.clear_wifi_credentials()
+    clear_saved_wifi_networks()
     record_system_event("CONFIG", "Wi-Fi credentials cleared from persistent storage.")
     return jsonify({
         "success": True,

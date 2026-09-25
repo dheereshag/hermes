@@ -99,6 +99,16 @@ def init_db(db_path: str | None = None) -> None:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_images_session ON spool_images(session_id);"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS wifi_networks (
+                    ssid TEXT PRIMARY KEY,
+                    password TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             conn.commit()
 
         logger.info(f"[Spool DB] Initialized SQLite outbox spool database at: {_db_path}")
@@ -375,6 +385,10 @@ def reset_db() -> None:
     with _db_lock, _get_connection() as conn:
         conn.execute("DELETE FROM spool_images;")
         conn.execute("DELETE FROM weighment_spool;")
+        try:
+            conn.execute("DELETE FROM wifi_networks;")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 

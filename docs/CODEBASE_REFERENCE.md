@@ -221,6 +221,15 @@ Decoupled, thread-safe in-memory telemetry buffer.
 - **`get_system_events() -> list`**: Returns copy of recent event list.
 - **`reset_telemetry() -> None`**: Resets all in-memory buffers (also aliased as `reset_state`).
 
+### `src/core/wifi_vault.py`
+Persistent SQLite vault for facility Wi-Fi credentials ensuring 1-click reconnect without retyping passwords. Follows NASA JPL Rule 4 (≤ 60 lines).
+
+- **`save_wifi_network(ssid: str, password: str, db_path=None) -> None`**: Upserts Wi-Fi credentials in `wifi_networks` and updates `last_connected_at`.
+- **`get_saved_wifi_networks(db_path=None) -> list[dict]`**: Returns list of saved SSIDs with timestamps (passwords strictly masked/omitted).
+- **`get_wifi_password(ssid: str, db_path=None) -> str | None`**: Retrieves stored password for seamless backend connection.
+- **`delete_saved_wifi_network(ssid: str, db_path=None) -> bool`**: Forgets a specific network.
+- **`clear_saved_wifi_networks(db_path=None) -> None`**: Wipes all saved networks from vault.
+
 ---
 
 ## 5. Devices Subsystem (`src/devices/`)
@@ -265,12 +274,13 @@ Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
 - **Functions**:
   - **`is_nmcli_available() -> bool`**: Verifies `nmcli` binary exists on the system.
   - **`get_wifi_interface() -> str`**: Detects active wireless interface name via `nmcli dev` (defaults to `wlan0`).
+  - **`get_existing_profile(ssid: str) -> str | None`**: Checks NetworkManager for existing saved profiles matching target SSID.
   - **`is_wifi_connected() -> bool`**: Inspects `nmcli dev` status. Returns `True` only if the wireless interface is connected to an upstream router (excluding our emergency hotspot).
-  - **`is_hotspot_active() -> bool`**: Returns boolean indicating if emergency hotspot is active.
-  - **`start_emergency_hotspot(ssid, password) -> bool`**: Configures the Wi-Fi interface in AP mode with shared IPv4 routing (`10.42.0.1`), automatically elevating via `sudo -n` if running as an unprivileged service. Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
+  - **`is_hotspot_active() -> bool`**: Actively inspects live NetworkManager devices (`nmcli -t -f TYPE,STATE,CONNECTION dev`). Returns `False` if `hermes-hotspot` profile is deleted externally.
+  - **`start_emergency_hotspot(ssid, password) -> bool`**: Self-healing: if `hermes-hotspot` profile was deleted or inactive, automatically recreates, configures, and brings up the AP on the fly. Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
   - **`stop_emergency_hotspot() -> bool`**: Tears down emergency AP connection.
-  - **`connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]`**: Attempts connection to facility router. If connection fails, immediately re-engages the emergency hotspot so technician connectivity is not lost.
-  - **`_watchdog_loop(interval: float) -> None`**: Background thread monitoring connection state every 30 seconds, automatically activating or deactivating the hotspot.
+  - **`connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]`**: Attempts connection to facility router. If profile exists, modifies credentials and activates existing profile to eliminate `Connection already exists` collisions; if new, connects and saves. If connection fails, immediately re-engages the emergency hotspot so technician connectivity is not lost.
+  - **`_watchdog_loop(interval: float) -> None`**: Background thread monitoring connection state every 30 seconds; self-heals by auto-recreating `hermes-hotspot` if Wi-Fi is disconnected and hotspot was deleted.
   - **`start_wifi_watchdog(interval=30.0) -> None`**: Starts watchdog thread.
   - **`stop_wifi_watchdog() -> None`**: Stops watchdog thread.
 
@@ -364,10 +374,14 @@ REST API endpoints.
   Returns active threshold weight, serial settings, and camera URLs. Requires superadmin session token.
 - **`POST /api/config`** *(Protected: `@auth_required`)*:
   Validates payload via `validate_config_payload`. Updates runtime settings in SQLite (`data/hermes.db`). Rejects attempts to alter compiled client parameters (`center_id`, `min_weight`, `anpr_server_url`, `device_id`, `device_key`). Dynamically restarts UART serial reader if port or baudrate was modified.
+- **`GET /api/wifi/saved`**:
+  Returns saved Wi-Fi networks list (SSID and connection timestamps; passwords strictly omitted).
+- **`DELETE /api/wifi/saved/<path:ssid>`** *(Protected: `@auth_required`)*:
+  Deletes specified network from the persistent Wi-Fi vault.
 - **`POST /api/wifi`** *(Protected: `@auth_required`)*:
-  Saves SSID and password to SQLite runtime store, then attempts immediate connection via `wifi.connect_to_wifi()`.
+  Provisions facility Wi-Fi credentials and attempts immediate network connection. If `password` is empty, automatically retrieves the stored password from the Wi-Fi vault for 1-click connection. Upserts credentials into persistent vault and updates runtime store.
 - **`POST /api/wifi/clear`** *(Protected: `@auth_required`)*:
-  Clears stored credentials in SQLite runtime store.
+  Clears stored credentials in SQLite runtime store and wipes the Wi-Fi vault.
 
 ### `src/web/auth.py`
 Authentication and security middleware.

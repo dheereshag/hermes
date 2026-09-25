@@ -13,6 +13,7 @@ from src.devices.scale import (
 )
 from src.devices.wifi import (
     connect_to_wifi,
+    get_existing_profile,
     get_wifi_interface,
     is_hotspot_active,
     is_nmcli_available,
@@ -31,6 +32,7 @@ __all__ = [
     "fetch_image_bytes",
     "get_current_baudrate",
     "get_current_serial_port",
+    "get_existing_profile",
     "get_uart_reader",
     "get_wifi_interface",
     "handle_scale_char",

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from src.devices.wifi import (
     connect_to_wifi,
+    get_existing_profile,
     get_wifi_interface,
     is_hotspot_active,
     is_wifi_connected,
@@ -54,6 +55,7 @@ class TestWiFiManager(unittest.TestCase):
     def test_start_and_stop_emergency_hotspot(self, mock_run, mock_nmcli):
         mock_res = MagicMock()
         mock_res.returncode = 0
+        mock_res.stdout = "wifi:connected:hermes-hotspot\n"
         mock_run.return_value = mock_res
 
         # Start hotspot
@@ -62,9 +64,28 @@ class TestWiFiManager(unittest.TestCase):
         self.assertTrue(is_hotspot_active())
 
         # Stop hotspot
+        mock_res.stdout = "wifi:disconnected:\n"
         stopped = stop_emergency_hotspot()
         self.assertTrue(stopped)
         self.assertFalse(is_hotspot_active())
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_is_hotspot_active_false_when_profile_deleted(self, mock_run, mock_nmcli):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "wifi:disconnected:\n"
+        mock_run.return_value = mock_res
+
+        self.assertFalse(is_hotspot_active())
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi._activate_hotspot_connection")
+    @patch("src.devices.wifi.is_hotspot_active", return_value=False)
+    def test_hotspot_self_healing_recreates_when_deleted(self, mock_active, mock_activate, mock_nmcli):
+        success = start_emergency_hotspot("hermes", "12345678")
+        self.assertTrue(success)
+        mock_activate.assert_called_once_with("hermes", "12345678")
 
     @patch("src.devices.wifi.is_nmcli_available", return_value=True)
     @patch("src.devices.wifi.subprocess.run")
@@ -134,6 +155,39 @@ class TestWiFiManager(unittest.TestCase):
             success = start_emergency_hotspot("hermes", "12345678")
             self.assertFalse(success)
             self.assertTrue(any("Insufficient privileges" in msg for msg in cm.output))
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_get_existing_profile_found(self, mock_run, mock_nmcli):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "Home_WiFi:802-11-wireless\nWired:ethernet\nOffice_5G:wifi\n"
+        mock_run.return_value = mock_res
+
+        self.assertEqual(get_existing_profile("Office_5G"), "Office_5G")
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_get_existing_profile_not_found(self, mock_run, mock_nmcli):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "Home_WiFi:802-11-wireless\nWired:ethernet\n"
+        mock_run.return_value = mock_res
+
+        self.assertIsNone(get_existing_profile("Unknown_WiFi"))
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.get_existing_profile", return_value="Office_5G")
+    @patch("src.devices.wifi._run_nmcli")
+    def test_connect_to_wifi_reconnect_existing_profile(self, mock_nmcli, mock_get_profile, mock_avail):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_nmcli.return_value = mock_res
+
+        success, msg = connect_to_wifi("Office_5G", "newpassword")
+        self.assertTrue(success)
+        self.assertIn("Successfully connected", msg)
+        mock_nmcli.assert_any_call(["connection", "up", "id", "Office_5G"], timeout=20, check=False)
 
 
 if __name__ == "__main__":

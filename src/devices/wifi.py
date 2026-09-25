@@ -124,8 +124,27 @@ def is_wifi_connected() -> bool:
 
 
 def is_hotspot_active() -> bool:
-    """Returns True if the emergency hotspot is currently broadcasting."""
-    return _hotspot_active
+    """Checks if emergency hotspot is actively broadcasting in NetworkManager."""
+    global _hotspot_active
+    if not is_nmcli_available():
+        return _hotspot_active
+    try:
+        res = _run_nmcli(["-t", "-f", "TYPE,STATE,CONNECTION", "dev"], timeout=5, check=False)
+        if res.returncode == 0:
+            for line in res.stdout.strip().splitlines():
+                parts = line.split(":")
+                if (
+                    len(parts) >= 3
+                    and parts[0] == "wifi"
+                    and parts[1] == "connected"
+                    and parts[2] == HOTSPOT_CON_NAME
+                ):
+                    _hotspot_active = True
+                    return True
+        _hotspot_active = False
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"[WiFi] Error checking hotspot status: {e}")
+    return False
 
 
 def _activate_hotspot_connection(ssid: str, password: str, ifname: str | None = None) -> None:
@@ -169,7 +188,8 @@ def start_emergency_hotspot(
     """
     global _hotspot_active
     with _wifi_lock:
-        if _hotspot_active:
+        if is_hotspot_active():
+            _hotspot_active = True
             return True
 
         if not is_nmcli_available():
@@ -190,6 +210,7 @@ def start_emergency_hotspot(
             if isinstance(e, subprocess.CalledProcessError) and e.stderr:
                 detail = f" | Detail: {e.stderr.strip()}"
             logger.error(f"[WiFi] Failed to start emergency hotspot: {e}{detail}")
+            _hotspot_active = False
             return False
 
 
@@ -197,7 +218,8 @@ def stop_emergency_hotspot() -> bool:
     """Tears down the emergency Access Point on wlan0."""
     global _hotspot_active
     with _wifi_lock:
-        if not _hotspot_active:
+        if not is_hotspot_active():
+            _hotspot_active = False
             return True
 
         if not is_nmcli_available():
@@ -215,6 +237,22 @@ def stop_emergency_hotspot() -> bool:
                 detail = f" | Detail: {e.stderr.strip()}"
             logger.error(f"[WiFi] Error stopping emergency hotspot: {e}{detail}")
             return False
+
+
+def get_existing_profile(ssid: str) -> str | None:
+    """Returns profile name if an existing Wi-Fi connection profile matches the SSID."""
+    if not is_nmcli_available():
+        return None
+    try:
+        res = _run_nmcli(["-t", "-f", "NAME,TYPE", "connection", "show"], timeout=5, check=False)
+        if res.returncode == 0:
+            for line in res.stdout.strip().splitlines():
+                parts = line.split(":")
+                if len(parts) >= 2 and parts[1].strip() in ("802-11-wireless", "wifi") and parts[0].strip() == ssid:
+                    return parts[0].strip()
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"[WiFi] Error checking existing profiles for '{ssid}': {e}")
+    return None
 
 
 def connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]:
@@ -236,11 +274,26 @@ def connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]:
         if is_hotspot_active():
             _run_nmcli(["connection", "down", HOTSPOT_CON_NAME], timeout=5, check=False)
 
-        cmd = ["dev", "wifi", "connect", ssid]
-        if password:
-            cmd.extend(["password", password])
-
-        res = _run_nmcli(cmd, timeout=20, check=False)
+        existing_profile = get_existing_profile(ssid)
+        if existing_profile:
+            logger.info(f"[WiFi] Found existing profile '{existing_profile}'. Updating and activating...")
+            if password:
+                _run_nmcli(
+                    [
+                        "connection", "modify", existing_profile,
+                        "wifi-sec.key-mgmt", "wpa-psk",
+                        "wifi-sec.psk", password,
+                    ],
+                    timeout=5,
+                    check=False,
+                )
+            res = _run_nmcli(["connection", "up", "id", existing_profile], timeout=20, check=False)
+        else:
+            logger.info(f"[WiFi] No existing profile for '{ssid}'. Creating new connection...")
+            cmd = ["dev", "wifi", "connect", ssid]
+            if password:
+                cmd.extend(["password", password])
+            res = _run_nmcli(cmd, timeout=20, check=False)
 
         if res.returncode == 0:
             logger.info(f"[WiFi] Successfully connected to Wi-Fi: '{ssid}'!")
@@ -302,6 +355,7 @@ __all__ = [
     "DEFAULT_HOTSPOT_SSID",
     "HOTSPOT_CON_NAME",
     "connect_to_wifi",
+    "get_existing_profile",
     "get_wifi_interface",
     "is_hotspot_active",
     "is_nmcli_available",
