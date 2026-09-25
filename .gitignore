@@ -1,0 +1,14 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Runtime configuration & databases
+config.json
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# System files
+.DS_Store
+

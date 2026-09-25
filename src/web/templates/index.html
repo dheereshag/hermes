@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gluvok Hermes — Industrial Console & System Configuration</title>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons (Offline) -->
+  <script src="{{ url_for('static', filename='lucide.min.js') }}"></script>
+
+  <!-- Tailwind CSS v4 Browser Runtime (Offline) -->
+  <script src="{{ url_for('static', filename='tailwindcss.js') }}"></script>
+
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      --color-background: #09090b;
+      --color-foreground: #fafafa;
+      --color-card: #09090b;
+      --color-card-foreground: #fafafa;
+      --color-popover: #09090b;
+      --color-popover-foreground: #fafafa;
+      --color-primary: #fafafa;
+      --color-primary-foreground: #09090b;
+      --color-secondary: #27272a;
+      --color-secondary-foreground: #fafafa;
+      --color-muted: #27272a;
+      --color-muted-foreground: #a1a1aa;
+      --color-accent: #27272a;
+      --color-accent-foreground: #fafafa;
+      --color-destructive: #ef4444;
+      --color-destructive-foreground: #fafafa;
+      --color-border: #27272a;
+      --color-input: #27272a;
+      --color-ring: #d4d4d8;
+
+      --color-sidebar: #09090b;
+      --color-sidebar-foreground: #f4f4f5;
+      --color-sidebar-primary: #18181b;
+      --color-sidebar-primary-foreground: #fafafa;
+      --color-sidebar-accent: #27272a;
+      --color-sidebar-accent-foreground: #fafafa;
+      --color-sidebar-border: #27272a;
+      --color-sidebar-ring: #d4d4d8;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      background-color: #09090b;
+      color: #fafafa;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Custom scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+    /* Transitions */
+    .sidebar-transition {
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-background text-foreground flex antialiased selection:bg-zinc-800 selection:text-white">
+
+  <!-- Mobile Sidebar Overlay Backdrop -->
+  <div id="sidebar-backdrop" onclick="toggleMobileSidebar()" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm hidden lg:hidden"></div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- SIDEBAR NAVIGATION COMPONENT                                           -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <aside id="main-sidebar" class="sidebar-transition fixed lg:sticky top-0 z-50 h-screen w-64 flex flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground -translate-x-full lg:translate-x-0 flex-shrink-0">
+    
+    <!-- Top Area: Header & Navigation Menu -->
+    <div class="flex flex-col flex-1 overflow-y-auto custom-scrollbar">
+      
+      <!-- Sidebar Header (App Branding / Workspace Switcher) -->
+      <div class="h-16 px-4 flex items-center gap-3 border-b border-sidebar-border">
+        <div class="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <!-- Mini LUVOK Geometric Logo -->
+          <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6">
+            <circle cx="100" cy="28" r="16" fill="#38bdf8"/>
+            <path d="M100 50 L100 70" stroke="#38bdf8" stroke-width="12" stroke-linecap="round"/>
+            <path d="M56 160 L100 60 L144 160" stroke="#38bdf8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M42 160 L100 40 L158 160" stroke="#38bdf8" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="36" y="155" width="128" height="14" rx="7" fill="#38bdf8"/>
+          </svg>
+        </div>
+        <div class="flex flex-col min-w-0 flex-1">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-sm text-foreground truncate">LUVOK Hermes</span>
+            <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">v2.0</span>
+          </div>
+          <span class="text-xs text-muted-foreground truncate">Weighbridge Edge</span>
+        </div>
+      </div>
+
+      <!-- Navigation Links (Grouped per sidebar-13 structure) -->
+      <div class="p-3 space-y-6">
+        
+        <!-- Group 1: Platform -->
+        <div class="space-y-1">
+          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Platform</div>
+          <nav class="space-y-1">
+            <button onclick="switchTab('overview')" id="nav-item-overview" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium bg-sidebar-accent text-sidebar-accent-foreground transition">
+              <i data-lucide="layout-dashboard" class="w-4 h-4 text-emerald-400"></i>
+              <span>Overview</span>
+            </button>
+            <button onclick="switchTab('scale')" id="nav-item-scale" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="scale" class="w-4 h-4"></i>
+              <span>Scale Indicator</span>
+            </button>
+            <button onclick="switchTab('anpr')" id="nav-item-anpr" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="camera" class="w-4 h-4"></i>
+              <span>ANPR & Cameras</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Group 2: Communications -->
+        <div class="space-y-1">
+          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Communications</div>
+          <nav class="space-y-1">
+            <button onclick="switchTab('cloud')" id="nav-item-cloud" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+              <span>Cloud Transfer</span>
+            </button>
+            <button onclick="switchTab('telemetry')" id="nav-item-telemetry" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="terminal" class="w-4 h-4"></i>
+              <span>Telemetry Logs</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Group 3: System Administration -->
+        <div class="space-y-1">
+          <div class="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Admin Panel</div>
+          <nav class="space-y-1">
+            <button onclick="switchTab('config')" id="nav-item-config" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="sliders-horizontal" class="w-4 h-4 text-amber-400"></i>
+              <span>System Config</span>
+              <span class="ml-auto flex h-1.5 w-1.5 rounded-full bg-amber-400" title="Superadmin Protected"></span>
+            </button>
+            <button onclick="switchTab('wifi')" id="nav-item-wifi" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition">
+              <i data-lucide="wifi" class="w-4 h-4 text-amber-400"></i>
+              <span>Wi-Fi Setup</span>
+              <span class="ml-auto flex h-1.5 w-1.5 rounded-full bg-amber-400" title="Superadmin Protected"></span>
+            </button>
+          </nav>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Sidebar Footer: Operator Account Profile (sidebar-13 style) -->
+    <div class="p-3 border-t border-sidebar-border">
+      <div class="flex items-center justify-between p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-xs text-white">
+            SA
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="text-xs font-semibold text-foreground truncate">Super Admin</span>
+            <span class="text-[10px] text-muted-foreground truncate">Operator</span>
+          </div>
+        </div>
+        <button onclick="logoutConfig()" title="Lock / Sign Out" class="p-1.5 rounded-md hover:bg-zinc-800 text-muted-foreground hover:text-white transition">
+          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN APPLICATION CONTENT AREA                                         -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    
+    <!-- Top Header Navigation Bar (Breadcrumb & Live Status) -->
+    <header class="h-16 px-4 sm:px-6 flex items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30">
+      
+      <!-- Left: Mobile Toggle, Desktop Separator & Breadcrumbs -->
+      <div class="flex items-center gap-3">
+        <button onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition lg:hidden">
+          <i data-lucide="panel-left" class="w-5 h-5"></i>
+        </button>
+        <div class="hidden lg:flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span class="hover:text-foreground cursor-pointer" onclick="switchTab('overview')">Platform</span>
+          <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          <span id="breadcrumb-current-tab" class="text-foreground font-semibold">Overview</span>
+        </div>
+      </div>
+
+      <!-- Right: Status Indicators & Quick Actions -->
+      <div class="flex items-center gap-2.5">
+        <div id="live-indicator" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/70 border border-border text-xs font-medium text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="network-ip-display">Connecting...</span>
+        </div>
+        <span id="hotspot-badge" class="hidden px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">Hotspot: 10.42.0.1</span>
+        <button onclick="fetchStatus(true)" class="p-2 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition">
+          <i id="refresh-icon" data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </header>
+
+    <!-- Main Views Container -->
+    <main class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto custom-scrollbar space-y-6">
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 1: OVERVIEW DASHBOARD                                         -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-overview" class="space-y-6">
+        
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <!-- Metric 1: Scale -->
+          <div onclick="switchTab('scale')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-emerald-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span>Scale Indicator</span>
+              <span id="ov-scale-state" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary text-foreground">IDLE</span>
+            </div>
+            <div>
+              <div id="ov-weight" class="text-3xl font-extrabold font-mono text-emerald-400">0.000 <span class="text-sm font-normal text-muted-foreground">kg</span></div>
+              <p class="text-[11px] font-mono text-muted-foreground mt-1">/dev/ttyUSB0 @ 1200 baud</p>
+            </div>
+            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+              <span>10s Stability Machine</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+
+          <!-- Metric 2: ANPR -->
+          <div onclick="switchTab('anpr')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-sky-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span>ANPR Microservice</span>
+              <span id="ov-argus-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ONLINE</span>
+            </div>
+            <div>
+              <div class="text-lg font-bold text-foreground">YOLO v11 + Docling</div>
+              <p class="text-[11px] font-mono text-muted-foreground mt-1">Port 8000 (FastAPI)</p>
+            </div>
+            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+              <span>Consensus Voting</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+
+          <!-- Metric 3: Cloud -->
+          <div onclick="switchTab('cloud')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-violet-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span>Cloud Transfer</span>
+              <span id="ov-sb-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">READY</span>
+            </div>
+            <div>
+              <div id="ov-center-id" class="text-base font-bold text-foreground truncate">Center ID: 1</div>
+              <p class="text-[11px] text-muted-foreground mt-1">Gluvok Cloud API</p>
+            </div>
+            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+              <span>Bearer JWT Auth</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+
+          <!-- Metric 4: Wi-Fi -->
+          <div onclick="switchTab('wifi')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-amber-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span>Local Network</span>
+              <span id="ov-wifi-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONNECTED</span>
+            </div>
+            <div>
+              <div id="ov-wifi-ssid" class="text-base font-bold text-foreground truncate">Setup Portal</div>
+              <p class="text-[11px] text-muted-foreground mt-1">Fallback AP: Gluvok-Setup</p>
+            </div>
+            <div class="text-[11px] text-muted-foreground flex items-center justify-between border-t border-border pt-2">
+              <span>Watchdog Active</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Latest Weighment Outcome Card -->
+        <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div class="flex items-center justify-between pb-4 border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                <i data-lucide="truck" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-foreground">Latest Weighment Session</h2>
+                <p class="text-xs text-muted-foreground">Most recent weighbridge record transmitted to Gluvok API</p>
+              </div>
+            </div>
+            <span id="ov-session-id" class="text-xs font-mono text-muted-foreground">No session yet</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-5">
+            <div>
+              <span class="text-xs font-medium text-muted-foreground block">Recognized Vehicle Plate</span>
+              <div id="ov-plate" class="text-2xl font-extrabold font-mono text-sky-400 mt-1">READY</div>
+            </div>
+            <div>
+              <span class="text-xs font-medium text-muted-foreground block">Confirmed Stable Weight</span>
+              <div id="ov-confirmed-weight" class="text-2xl font-extrabold font-mono text-emerald-400 mt-1">0.000 kg</div>
+            </div>
+            <div>
+              <span class="text-xs font-medium text-muted-foreground block">Timestamp</span>
+              <div id="ov-last-time" class="text-sm font-medium text-foreground mt-1.5">Waiting for scale trigger...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 2: SCALE INDICATOR                                            -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-scale" class="hidden space-y-6">
+        <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <i data-lucide="scale" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-foreground">Weighing Scale Indicator</h2>
+                <p class="text-xs text-muted-foreground">UART stream reader (/dev/ttyUSB0 @ 1200 baud) with 10s stability state machine</p>
+              </div>
+            </div>
+            <span id="scale-state-detail" class="px-2.5 py-1 rounded-full text-xs font-bold bg-secondary text-foreground">STATE: IDLE</span>
+          </div>
+
+          <div class="p-8 rounded-xl bg-zinc-950 border border-zinc-900 text-center space-y-2">
+            <span class="text-xs text-muted-foreground uppercase tracking-widest font-mono font-medium">Live Weight Stream</span>
+            <div id="scale-page-weight" class="text-6xl font-black font-mono text-emerald-400">0.000 <span class="text-2xl font-normal text-zinc-500">kg</span></div>
+            <div class="text-xs font-mono text-muted-foreground pt-2">Threshold: <span id="scale-thresh-disp" class="text-emerald-400 font-bold">50.0 kg</span> &bull; Tolerance: &plusmn;2.0 kg continuous</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 3: ANPR & CAMERAS                                             -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-anpr" class="hidden space-y-6">
+        <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                <i data-lucide="camera" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-foreground">ANPR & Optical Cameras</h2>
+                <p class="text-xs text-muted-foreground">Continuous 2s Camera 1 capturing + Parallel auxiliary overview snapshots</p>
+              </div>
+            </div>
+            <span id="anpr-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ARGUS ONLINE</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="anpr-error-cards">
+            <!-- Populated via JS with error catalog -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 4: CLOUD TRANSFER                                             -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-cloud" class="hidden space-y-6">
+        <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                <i data-lucide="cloud" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-foreground">Gluvok Cloud Transfer</h2>
+                <p class="text-xs text-muted-foreground">Direct Base64 weighment submission to https://gluvok.vercel.app</p>
+              </div>
+            </div>
+            <span id="cloud-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONFIGURED</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="p-4 rounded-xl border border-border bg-secondary/30 space-y-2">
+              <span class="text-xs text-muted-foreground font-medium block">Configured Center ID</span>
+              <div id="cloud-center-id-val" class="text-xl font-bold font-mono text-foreground">1</div>
+            </div>
+            <div class="p-4 rounded-xl border border-border bg-secondary/30 space-y-2">
+              <span class="text-xs text-muted-foreground font-medium block">Device Credentials</span>
+              <div class="text-sm font-semibold font-mono text-emerald-400 flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> Secured in Hardware
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 5: WI-FI SETUP                                                -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 5: WI-FI SETUP (ADMIN PROTECTED)                              -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-wifi" class="hidden space-y-6 relative">
+
+        <!-- Security Dialog Modal Overlay (When Locked) -->
+        <div id="wifi-login-overlay" class="absolute inset-0 z-40 flex items-center justify-center p-4" style="min-height:550px;">
+          <div class="absolute inset-0 bg-black/75 backdrop-blur-md rounded-xl"></div>
+          <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl space-y-6">
+            
+            <div class="flex flex-col items-center text-center space-y-3">
+              <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
+                <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-8 h-8">
+                  <circle cx="100" cy="28" r="16" fill="#f59e0b"/>
+                  <path d="M100 50 L100 70" stroke="#f59e0b" stroke-width="12" stroke-linecap="round"/>
+                  <path d="M56 160 L100 60 L144 160" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  <path d="M42 160 L100 40 L158 160" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  <rect x="36" y="155" width="128" height="14" rx="7" fill="#f59e0b"/>
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <h3 class="text-base font-bold text-foreground">Wi-Fi Administration</h3>
+                <p class="text-xs text-muted-foreground">Sign in with superadmin credentials to configure facility network</p>
+              </div>
+            </div>
+
+            <form id="wifi-login-form" onsubmit="handleWifiLogin(event)" class="space-y-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">User ID</label>
+                <input id="wifi-login-userid" type="text" placeholder="superadmin" autocomplete="username" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Password</label>
+                <div class="relative">
+                  <input id="wifi-login-password" type="password" placeholder="••••••••" autocomplete="current-password" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition pr-10" />
+                  <button type="button" onclick="toggleWifiPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="wifi-login-error" class="hidden p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs"></div>
+              <button type="submit" id="wifi-login-btn" class="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition shadow-sm">
+                Sign In
+              </button>
+            </form>
+            <p class="text-[10px] text-muted-foreground text-center">Protected admin panel &bull; Session token secured</p>
+          </div>
+        </div>
+
+        <!-- Wi-Fi Content Panel (Unlocked) -->
+        <div id="wifi-panel" class="space-y-6 opacity-25 pointer-events-none select-none filter blur-sm transition-all duration-300">
+          <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+            <div class="flex items-center justify-between pb-4 border-b border-border">
+              <div class="flex items-center gap-3">
+                <div class="p-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <i data-lucide="wifi" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h2 class="text-base font-semibold text-foreground">Wi-Fi Configuration</h2>
+                  <p class="text-xs text-muted-foreground">Configure wireless plant network or manage emergency hotspot</p>
+                </div>
+              </div>
+              <span id="wifi-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONNECTED</span>
+            </div>
+
+            <form onsubmit="saveWifi(event)" class="space-y-4 max-w-md">
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Network SSID</label>
+                <input id="wifi-ssid" type="text" placeholder="Plant_WiFi_5G" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Password</label>
+                <input id="wifi-password" type="password" placeholder="••••••••" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+              </div>
+              <div id="wifi-alert" class="hidden"></div>
+              <div class="flex items-center gap-3">
+                <button type="submit" id="save-wifi-btn" class="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition">Save & Connect</button>
+                <button type="button" onclick="clearWifi()" class="px-4 py-2 rounded-lg border border-input hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition">Clear Wi-Fi</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 6: TELEMETRY LOGS                                             -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-telemetry" class="hidden space-y-6">
+        <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                <i data-lucide="terminal" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-foreground">System Telemetry Feed</h2>
+                <p class="text-xs text-muted-foreground">In-memory circular event buffer with sub-second timestamps</p>
+              </div>
+            </div>
+            <button onclick="fetchStatus(true)" class="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-xs font-semibold text-foreground transition">Refresh Stream</button>
+          </div>
+
+          <div id="events-log" class="custom-scrollbar p-4 rounded-xl bg-zinc-950 border border-zinc-900 font-mono text-xs text-zinc-300 space-y-1.5 min-h-[300px] max-h-[500px] overflow-y-auto leading-relaxed">
+            <div class="text-zinc-600">[System] Initializing live telemetry stream...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 7: SYSTEM CONFIGURATION                                       -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div id="view-config" class="hidden space-y-6 relative">
+
+        <!-- Security Dialog Modal Overlay (When Locked) -->
+        <div id="config-login-overlay" class="absolute inset-0 z-40 flex items-center justify-center p-4" style="min-height:550px;">
+          <div class="absolute inset-0 bg-black/75 backdrop-blur-md rounded-xl"></div>
+          <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl space-y-6">
+            
+            <!-- Modal Header with LUVOK Logo -->
+            <div class="flex flex-col items-center text-center space-y-3">
+              <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
+                <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-8 h-8">
+                  <circle cx="100" cy="28" r="16" fill="#38bdf8"/>
+                  <path d="M100 50 L100 70" stroke="#38bdf8" stroke-width="12" stroke-linecap="round"/>
+                  <path d="M56 160 L100 60 L144 160" stroke="#38bdf8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  <path d="M42 160 L100 40 L158 160" stroke="#38bdf8" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  <rect x="36" y="155" width="128" height="14" rx="7" fill="#38bdf8"/>
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <h3 class="text-base font-bold text-foreground">System Configuration</h3>
+                <p class="text-xs text-muted-foreground">Sign in with superadmin credentials to configure hardware parameters</p>
+              </div>
+            </div>
+
+            <!-- Login Form -->
+            <form id="config-login-form" onsubmit="handleConfigLogin(event)" class="space-y-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">User ID</label>
+                <input id="config-login-userid" type="text" placeholder="superadmin" autocomplete="username" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Password</label>
+                <div class="relative">
+                  <input id="config-login-password" type="password" placeholder="••••••••" autocomplete="current-password" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition pr-10" />
+                  <button type="button" onclick="toggleConfigPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="config-login-error" class="hidden p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs"></div>
+              <button type="submit" id="config-login-btn" class="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition shadow-sm">
+                Sign In
+              </button>
+            </form>
+            <p class="text-[10px] text-muted-foreground text-center">Protected hardware settings &bull; Session token secured</p>
+          </div>
+        </div>
+
+        <!-- Configuration Panel (Unlocked) -->
+        <div id="config-panel" class="space-y-6 opacity-25 pointer-events-none select-none filter blur-sm transition-all duration-300">
+          
+          <!-- Section 1: Weighbridge Indicator & Site Settings -->
+          <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+            <div class="flex items-center justify-between pb-4 border-b border-border">
+              <div class="flex items-center gap-3">
+                <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                  <i data-lucide="scale" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold text-foreground">Weighbridge Hardware & Site Settings</h3>
+                  <p class="text-xs text-muted-foreground">Serial UART indicator device port, baud rate, threshold, and Collection Center ID</p>
+                </div>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">LIVE APPLIED</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Threshold Weight (kg)</label>
+                <input id="cfg-min-weight" type="number" step="0.1" min="0" placeholder="50.0" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+                <p class="text-[11px] text-muted-foreground">Minimum weight to initiate session</p>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Collection Center ID</label>
+                <input id="cfg-center-id" type="number" min="1" step="1" placeholder="1" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+                <p class="text-[11px] text-muted-foreground">Collection center identifier</p>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Serial Port Path</label>
+                <input id="cfg-serial-port" type="text" placeholder="/dev/ttyUSB0" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+                <p class="text-[11px] text-muted-foreground">UART hardware device path</p>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-foreground">Baud Rate</label>
+                <select id="cfg-serial-baudrate" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition cursor-pointer">
+                  <option value="300">300</option>
+                  <option value="600">600</option>
+                  <option value="1200" selected>1200</option>
+                  <option value="2400">2400</option>
+                  <option value="4800">4800</option>
+                  <option value="9600">9600</option>
+                  <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                  <option value="57600">57600</option>
+                  <option value="115200">115200</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground">Indicator communication speed</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Camera URLs Configuration -->
+          <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-6">
+            <div class="flex items-center justify-between pb-4 border-b border-border">
+              <div class="flex items-center gap-3">
+                <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                  <i data-lucide="camera" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold text-foreground">Camera Video & Snapshot Streams</h3>
+                  <p class="text-xs text-muted-foreground">RTSP / HTTP snapshot stream URLs for ANPR and auxiliary overview cameras</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- ANPR License Plate Cameras (Front, Rear, etc.) -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="text-xs font-medium text-foreground block">ANPR License Plate Cameras</label>
+                  <p class="text-[11px] text-muted-foreground">Continuous OCR streams (e.g. Front and Rear number plate cameras)</p>
+                </div>
+                <button type="button" onclick="addAnprCameraField()" class="px-3 py-1.5 rounded-lg border border-input bg-secondary/60 hover:bg-secondary text-xs font-semibold text-foreground transition flex items-center gap-1.5">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  Add ANPR Camera
+                </button>
+              </div>
+              <div id="cfg-anpr-cameras-container" class="space-y-2.5">
+                <!-- Dynamically populated via loadSystemConfig() -->
+              </div>
+            </div>
+
+            <!-- Auxiliary Overview Cameras (Cameras 2...N) -->
+            <div class="space-y-3 pt-3 border-t border-border/50">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="text-xs font-medium text-foreground block">Auxiliary Overview Cameras</label>
+                  <p class="text-[11px] text-muted-foreground">Contextual overview snapshots captured at start of weighment</p>
+                </div>
+                <button type="button" onclick="addAuxCameraField()" class="px-3 py-1.5 rounded-lg border border-input bg-secondary/60 hover:bg-secondary text-xs font-semibold text-foreground transition flex items-center gap-1.5">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  Add Overview Camera
+                </button>
+              </div>
+              <div id="cfg-aux-cameras-container" class="space-y-2.5">
+                <!-- Dynamically populated via loadSystemConfig() -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: ANPR Microservice Endpoint -->
+          <div class="p-6 rounded-xl border border-border bg-card text-card-foreground shadow-sm space-y-4">
+            <div class="flex items-center gap-3 pb-3 border-b border-border">
+              <div class="p-2.5 rounded-lg bg-secondary text-primary">
+                <i data-lucide="cpu" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-semibold text-foreground">ANPR Microservice Endpoint (Argus)</h3>
+                <p class="text-xs text-muted-foreground">FastAPI inference server URL (auto-maps to http://127.0.0.1:8000/recognize)</p>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-foreground">Argus Server URL</label>
+              <input id="cfg-anpr-server-url" type="text" placeholder="http://127.0.0.1:8000/recognize" class="w-full px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+            </div>
+          </div>
+
+          <!-- Save Button & Alert Feedback -->
+
+
+          <!-- Save Button & Alert Feedback -->
+          <div id="config-save-alert" class="hidden"></div>
+          <div class="flex items-center gap-3">
+            <button type="button" onclick="saveSystemConfig(event)" id="config-save-btn" class="px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition shadow-sm flex items-center gap-2">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              Save Configuration
+            </button>
+            <button type="button" onclick="loadSystemConfig()" class="px-4 py-2.5 rounded-lg border border-input hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition">
+              Reset Changes
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="h-12 px-6 flex items-center justify-between border-t border-border bg-background text-[11px] text-muted-foreground">
+      <span>Gluvok Weighbridge Industrial Integration System</span>
+      <span>Zero Disk Wear &bull; In-RAM Processing</span>
+    </footer>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- JAVASCRIPT LOGIC                                                      -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <script>
+    let activeTab = "overview";
+    let liveErrorCounts = {};
+    let authToken = sessionStorage.getItem("hermes_token") || "";
+
+    const ANPR_ERROR_CODES_DB = [
+      { code: "NO_PLATE_DETECTED", category: "ANPR Engine", cause: "Vehicle on scale, but plate is obscured or dirty.", fix: "Inspect Camera 1 alignment or clean license plate." },
+      { code: "REJECTED_HUMAN_DETECTED", category: "Safety Guard", cause: "YOLO pre-screening detected human near vehicle.", fix: "Ensure operators step clear of the weighbridge platform." },
+      { code: "REJECTED_NO_FOUR_WHEELER", category: "Pre-screening", cause: "Weight active, but no 4-wheeler detected in frame.", fix: "Ensure vehicle is centered within Camera 1 field of view." },
+      { code: "ANPR_TIMEOUT", category: "Inference", cause: "Argus microservice took longer than 15s to compute.", fix: "Check Raspberry Pi CPU utilization." }
+    ];
+
+    function getAuthHeaders() {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) {
+        headers["Authorization"] = "Bearer " + authToken;
+      }
+      return headers;
+    }
+
+    function toggleMobileSidebar() {
+      const sidebar = document.getElementById("main-sidebar");
+      const backdrop = document.getElementById("sidebar-backdrop");
+      const isOpen = !sidebar.classList.contains("-translate-x-full");
+      if (isOpen) {
+        sidebar.classList.add("-translate-x-full");
+        backdrop.classList.add("hidden");
+      } else {
+        sidebar.classList.remove("-translate-x-full");
+        backdrop.classList.remove("hidden");
+      }
+    }
+
+    function switchTab(tabId) {
+      if (tabId === "admin") tabId = "config";
+      activeTab = tabId;
+      window.location.hash = tabId;
+
+      // Close mobile sidebar if open
+      const sidebar = document.getElementById("main-sidebar");
+      const backdrop = document.getElementById("sidebar-backdrop");
+      if (window.innerWidth < 1024) {
+        sidebar.classList.add("-translate-x-full");
+        backdrop.classList.add("hidden");
+      }
+
+      // Update breadcrumbs
+      const titles = {
+        overview: "Overview",
+        scale: "Scale Indicator",
+        anpr: "ANPR & Cameras",
+        cloud: "Cloud Transfer",
+        wifi: "Admin Wi-Fi Setup",
+        telemetry: "Telemetry Logs",
+        config: "Admin System Config"
+      };
+      document.getElementById("breadcrumb-current-tab").textContent = titles[tabId] || tabId;
+
+      // Toggle views
+      const tabs = ["overview", "scale", "anpr", "cloud", "wifi", "telemetry", "config"];
+      tabs.forEach(t => {
+        const view = document.getElementById("view-" + t);
+        const navBtn = document.getElementById("nav-item-" + t);
+        if (view) view.classList.toggle("hidden", t !== tabId);
+        if (navBtn) {
+          if (t === tabId) {
+            navBtn.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold bg-sidebar-accent text-sidebar-accent-foreground transition shadow-sm";
+          } else {
+            navBtn.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition";
+          }
+        }
+      });
+
+      if (tabId === "config" || tabId === "wifi") {
+        if (authToken) {
+          unlockAdminPanels();
+        } else {
+          lockAdminPanels();
+        }
+      }
+
+      lucide.createIcons();
+    }
+
+    function unlockAdminPanels() {
+      const cOverlay = document.getElementById('config-login-overlay');
+      if (cOverlay) cOverlay.style.display = 'none';
+      const cPanel = document.getElementById('config-panel');
+      if (cPanel) cPanel.classList.remove('opacity-25', 'pointer-events-none', 'select-none', 'filter', 'blur-sm');
+
+      const wOverlay = document.getElementById('wifi-login-overlay');
+      if (wOverlay) wOverlay.style.display = 'none';
+      const wPanel = document.getElementById('wifi-panel');
+      if (wPanel) wPanel.classList.remove('opacity-25', 'pointer-events-none', 'select-none', 'filter', 'blur-sm');
+
+      loadSystemConfig();
+      lucide.createIcons();
+    }
+
+    function lockAdminPanels() {
+      authToken = "";
+      sessionStorage.removeItem('hermes_token');
+
+      const cOverlay = document.getElementById('config-login-overlay');
+      if (cOverlay) cOverlay.style.display = 'flex';
+      const cPanel = document.getElementById('config-panel');
+      if (cPanel) cPanel.classList.add('opacity-25', 'pointer-events-none', 'select-none', 'filter', 'blur-sm');
+
+      const wOverlay = document.getElementById('wifi-login-overlay');
+      if (wOverlay) wOverlay.style.display = 'flex';
+      const wPanel = document.getElementById('wifi-panel');
+      if (wPanel) wPanel.classList.add('opacity-25', 'pointer-events-none', 'select-none', 'filter', 'blur-sm');
+
+      const cUser = document.getElementById('config-login-userid');
+      if (cUser) cUser.value = '';
+      const cPass = document.getElementById('config-login-password');
+      if (cPass) cPass.value = '';
+      const cErr = document.getElementById('config-login-error');
+      if (cErr) cErr.classList.add('hidden');
+
+      const wUser = document.getElementById('wifi-login-userid');
+      if (wUser) wUser.value = '';
+      const wPass = document.getElementById('wifi-login-password');
+      if (wPass) wPass.value = '';
+      const wErr = document.getElementById('wifi-login-error');
+      if (wErr) wErr.classList.add('hidden');
+
+      lucide.createIcons();
+    }
+
+    function checkExistingAuth() {
+      if (authToken) {
+        unlockAdminPanels();
+      } else {
+        lockAdminPanels();
+      }
+    }
+
+    async function performLogin(userid, password, errorEl, btn) {
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = 'Authenticating...';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userid, password })
+        });
+        const resp = await res.json();
+
+        if (res.ok && resp.success && resp.token) {
+          authToken = resp.token;
+          sessionStorage.setItem('hermes_token', authToken);
+          if (errorEl) errorEl.classList.add('hidden');
+          unlockAdminPanels();
+        } else {
+          if (errorEl) {
+            errorEl.classList.remove('hidden');
+            errorEl.innerHTML = `<strong>Login Failed:</strong> ${resp.error || 'Invalid credentials'}`;
+          }
+        }
+      } catch (err) {
+        if (errorEl) {
+          errorEl.classList.remove('hidden');
+          errorEl.textContent = 'Error: ' + err.message;
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleConfigLogin(event) {
+      event.preventDefault();
+      const userid = document.getElementById('config-login-userid').value.trim();
+      const password = document.getElementById('config-login-password').value;
+      const errorEl = document.getElementById('config-login-error');
+      const btn = document.getElementById('config-login-btn');
+      await performLogin(userid, password, errorEl, btn);
+    }
+
+    async function handleWifiLogin(event) {
+      event.preventDefault();
+      const userid = document.getElementById('wifi-login-userid').value.trim();
+      const password = document.getElementById('wifi-login-password').value;
+      const errorEl = document.getElementById('wifi-login-error');
+      const btn = document.getElementById('wifi-login-btn');
+      await performLogin(userid, password, errorEl, btn);
+    }
+
+    function logoutConfig() {
+      lockAdminPanels();
+    }
+
+    function toggleConfigPasswordVisibility() {
+      const input = document.getElementById('config-login-password');
+      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function toggleWifiPasswordVisibility() {
+      const input = document.getElementById('wifi-login-password');
+      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function loadSystemConfig() {
+      if (!authToken) return;
+      try {
+        const res = await fetch('/api/config', {
+          headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+          lockAdminPanels();
+          return;
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        document.getElementById('cfg-min-weight').value = data.min_weight ?? 50.0;
+        document.getElementById('cfg-serial-port').value = data.serial_port ?? '/dev/ttyUSB0';
+        document.getElementById('cfg-serial-baudrate').value = String(data.serial_baudrate ?? 1200);
+        document.getElementById('cfg-anpr-server-url').value = data.anpr_server_url ?? '';
+        document.getElementById('cfg-center-id').value = data.center_id ?? 1;
+
+        // Populate ANPR Cameras
+        const anprContainer = document.getElementById('cfg-anpr-cameras-container');
+        anprContainer.innerHTML = '';
+        const anprUrls = (data.anpr_camera_urls && data.anpr_camera_urls.length > 0)
+          ? data.anpr_camera_urls
+          : (data.anpr_camera_url ? [data.anpr_camera_url] : []);
+        if (anprUrls.length === 0) {
+          addAnprCameraField();
+        } else {
+          anprUrls.forEach((url, i) => addAnprCameraField(url, i + 1));
+        }
+
+        // Populate Auxiliary Cameras
+        const auxContainer = document.getElementById('cfg-aux-cameras-container');
+        auxContainer.innerHTML = '';
+        const auxUrls = data.auxiliary_camera_urls || [];
+        if (auxUrls.length === 0) {
+          addAuxCameraField();
+        } else {
+          auxUrls.forEach((url, i) => addAuxCameraField(url, i + 1));
+        }
+        lucide.createIcons();
+      } catch (err) {
+        console.warn('Config load error:', err);
+      }
+    }
+
+    function addAnprCameraField(value = '', camNum = null) {
+      const container = document.getElementById('cfg-anpr-cameras-container');
+      const idx = container.children.length + 1;
+      const num = camNum || idx;
+      const labelText = num === 1 ? 'ANPR 1 (Front)' : (num === 2 ? 'ANPR 2 (Rear)' : `ANPR ${num}`);
+      const div = document.createElement('div');
+      div.className = 'flex items-center gap-2';
+      div.innerHTML = `
+        <span class="text-xs font-mono text-muted-foreground w-28 shrink-0">${labelText}</span>
+        <input type="text" value="${value}" placeholder="rtsp://admin:pass@192.168.1.${100 + num}:554/stream"
+          class="cfg-anpr-cam-url flex-1 px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+        <button type="button" onclick="removeAnprField(this)" class="p-2 rounded-lg border border-border hover:bg-destructive/10 hover:border-destructive/30 text-muted-foreground hover:text-destructive transition" title="Remove camera">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      `;
+      container.appendChild(div);
+      lucide.createIcons();
+    }
+
+    function removeAnprField(btn) {
+      const container = document.getElementById('cfg-anpr-cameras-container');
+      if (container.children.length <= 1) {
+        const input = btn.parentElement.querySelector('input');
+        if (input) input.value = '';
+        return;
+      }
+      btn.parentElement.remove();
+    }
+
+    function addAuxCameraField(value = '', camNum = null) {
+      const container = document.getElementById('cfg-aux-cameras-container');
+      const idx = container.children.length + 1;
+      const num = camNum || idx;
+      const div = document.createElement('div');
+      div.className = 'flex items-center gap-2';
+      div.innerHTML = `
+        <span class="text-xs font-mono text-muted-foreground w-28 shrink-0">Overview ${num}</span>
+        <input type="text" value="${value}" placeholder="rtsp://admin:pass@192.168.1.${200 + num}:554/stream"
+          class="cfg-aux-cam-url flex-1 px-3 py-2 rounded-lg bg-background border border-input font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+        <button type="button" onclick="this.parentElement.remove()" class="p-2 rounded-lg border border-border hover:bg-destructive/10 hover:border-destructive/30 text-muted-foreground hover:text-destructive transition" title="Remove camera">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      `;
+      container.appendChild(div);
+      lucide.createIcons();
+    }
+
+    async function saveSystemConfig(event) {
+      if (event) event.preventDefault();
+      const btn = document.getElementById('config-save-btn');
+      const alert = document.getElementById('config-save-alert');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving...';
+      lucide.createIcons();
+
+      const anprInputs = document.querySelectorAll('.cfg-anpr-cam-url');
+      const anprUrls = Array.from(anprInputs).map(el => el.value.trim()).filter(Boolean);
+
+      const auxInputs = document.querySelectorAll('.cfg-aux-cam-url');
+      const auxUrls = Array.from(auxInputs).map(el => el.value.trim()).filter(Boolean);
+
+      const payload = {
+        min_weight: parseFloat(document.getElementById('cfg-min-weight').value) || 50.0,
+        serial_port: document.getElementById('cfg-serial-port').value.trim(),
+        serial_baudrate: parseInt(document.getElementById('cfg-serial-baudrate').value) || 1200,
+        anpr_camera_urls: anprUrls,
+        anpr_camera_url: anprUrls.length > 0 ? anprUrls[0] : '',
+        auxiliary_camera_urls: auxUrls,
+        anpr_server_url: document.getElementById('cfg-anpr-server-url').value.trim(),
+        center_id: parseInt(document.getElementById('cfg-center-id').value) || 1,
+      };
+
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+        const resp = await res.json();
+
+        if (res.ok && resp.success) {
+          alert.className = 'p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 block text-xs';
+          alert.innerHTML = `<strong>Saved:</strong> ${resp.message}`;
+        } else if (res.status === 401) {
+          alert.className = 'p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs';
+          alert.innerHTML = `<strong>Unauthorized:</strong> Session expired. Please sign in again.`;
+          logoutConfig();
+        } else {
+          alert.className = 'p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs';
+          alert.innerHTML = `<strong>Error:</strong> ${resp.error || resp.message || 'Save failed'}`;
+        }
+        fetchStatus();
+      } catch (err) {
+        alert.className = 'p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs';
+        alert.textContent = 'Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Save Configuration';
+        lucide.createIcons();
+      }
+    }
+
+    async function saveWifi(event) {
+      event.preventDefault();
+      const ssid = document.getElementById("wifi-ssid").value.trim();
+      const password = document.getElementById("wifi-password").value;
+      const alert = document.getElementById("wifi-alert");
+      const btn = document.getElementById("save-wifi-btn");
+
+      btn.disabled = true;
+      btn.textContent = `Connecting to ${ssid}...`;
+
+      try {
+        const res = await fetch("/api/wifi", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ ssid, password })
+        });
+        const resp = await res.json();
+
+        if (res.ok && resp.success) {
+          alert.className = "p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 block text-xs";
+          alert.innerHTML = `<strong>Success:</strong> Connected to ${ssid}.`;
+        } else if (res.status === 401) {
+          lockAdminPanels();
+          alert.className = "p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs";
+          alert.textContent = "Unauthorized: Superadmin session expired. Please sign in.";
+        } else {
+          alert.className = "p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs";
+          alert.textContent = `Warning: ${resp.message || resp.error || 'Connection failed'}`;
+        }
+        fetchStatus();
+      } catch (err) {
+        alert.className = "p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs";
+        alert.textContent = 'Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save & Connect';
+      }
+    }
+
+    async function clearWifi() {
+      if (!confirm("Clear stored Wi-Fi credentials?")) return;
+      const alert = document.getElementById("wifi-alert");
+      try {
+        const res = await fetch("/api/wifi/clear", {
+          method: "POST",
+          headers: getAuthHeaders(),
+        });
+        const resp = await res.json();
+        if (res.ok && resp.success) {
+          document.getElementById("wifi-ssid").value = "";
+          document.getElementById("wifi-password").value = "";
+          alert.className = "p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 block text-xs";
+          alert.textContent = resp.message || "Wi-Fi credentials cleared.";
+        } else if (res.status === 401) {
+          lockAdminPanels();
+          alert.className = "p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs";
+          alert.textContent = "Unauthorized: Superadmin session expired. Please sign in.";
+        }
+        fetchStatus();
+      } catch (err) {
+        alert.className = "p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive block text-xs";
+        alert.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function renderAnprErrors() {
+      const container = document.getElementById("anpr-error-cards");
+      if (!container) return;
+      container.innerHTML = ANPR_ERROR_CODES_DB.map(e => `
+        <div class="p-4 rounded-xl border border-border bg-card space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono font-bold text-foreground text-xs">${e.code}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-secondary text-secondary-foreground">${e.category}</span>
+          </div>
+          <p class="text-muted-foreground text-xs leading-relaxed"><strong class="text-foreground">Cause:</strong> ${e.cause}</p>
+          <div class="p-2 rounded-lg bg-zinc-950 text-emerald-400 text-xs font-mono">Fix: ${e.fix}</div>
+        </div>
+      `).join("");
+    }
+
+    async function fetchStatus(manual = false) {
+      try {
+        const res = await fetch("/api/status");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Scale
+        if (data.scale) {
+          const w = (data.scale.current_weight || 0).toFixed(3);
+          document.getElementById("ov-weight").innerHTML = `${w} <span class="text-sm font-normal text-muted-foreground">kg</span>`;
+          document.getElementById("scale-page-weight").innerHTML = `${w} <span class="text-2xl font-normal text-zinc-500">kg</span>`;
+          document.getElementById("ov-scale-state").textContent = data.scale.state || "IDLE";
+          document.getElementById("scale-state-detail").textContent = "STATE: " + (data.scale.state || "IDLE");
+        }
+
+        // Config & Center
+        if (data.config) {
+          document.getElementById("scale-thresh-disp").textContent = `${(data.config.min_weight || 50).toFixed(1)} kg`;
+          document.getElementById("ov-center-id").textContent = `Center ID: ${data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1)}`;
+          document.getElementById("cloud-center-id-val").textContent = data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1);
+          document.getElementById("ov-wifi-ssid").textContent = data.config.wifi_ssid || "Setup Portal";
+        }
+
+        // Cloud status
+        const cloudPill = document.getElementById("cloud-live-status-pill");
+        if (cloudPill) {
+          if (data.cloud && data.cloud.configured) {
+            cloudPill.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+            cloudPill.textContent = "CONFIGURED";
+          } else {
+            cloudPill.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+            cloudPill.textContent = "NOT CONFIGURED";
+          }
+        }
+
+        // Argus & Cloud
+        const argusBadge = document.getElementById("ov-argus-badge");
+        if (data.argus && data.argus.online) {
+          argusBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          argusBadge.textContent = "ONLINE";
+        } else {
+          argusBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive/10 text-destructive border border-destructive/20";
+          argusBadge.textContent = "OFFLINE";
+        }
+
+        // Network / IP
+        const ipDisplay = document.getElementById("network-ip-display");
+        const hsBadge = document.getElementById("hotspot-badge");
+        if (data.wifi && data.wifi.hotspot_active) {
+          hsBadge.classList.remove("hidden");
+          ipDisplay.textContent = "Hotspot: 10.42.0.1";
+        } else {
+          hsBadge.classList.add("hidden");
+          ipDisplay.textContent = data.wifi && data.wifi.connected ? "Wi-Fi Connected" : "Local Network";
+        }
+
+        // Latest Session
+        if (data.latest_weighment && data.latest_weighment.session_id) {
+          const lw = data.latest_weighment;
+          document.getElementById("ov-plate").textContent = lw.plate || "READY";
+          document.getElementById("ov-confirmed-weight").textContent = (lw.weight || 0).toFixed(3) + " kg";
+          document.getElementById("ov-session-id").textContent = lw.session_id;
+          document.getElementById("ov-last-time").textContent = lw.timestamp ? "Captured at " + lw.timestamp : "Just now";
+        }
+
+        // Telemetry Feed
+        if (data.events && data.events.length > 0) {
+          const logDiv = document.getElementById("events-log");
+          logDiv.innerHTML = data.events.map(ev => `
+            <div class="flex items-start gap-2">
+              <span class="text-zinc-600 flex-shrink-0">[${ev.time || 'NOW'}]</span>
+              <span class="text-emerald-400 font-bold flex-shrink-0">[${ev.source || 'SYSTEM'}]</span>
+              <span class="text-zinc-300 break-words">${ev.message}</span>
+            </div>
+          `).join("");
+        }
+
+      } catch (err) {
+        console.warn("Status fetch error:", err);
+      }
+    }
+
+    // Initialize
+    const initialHash = window.location.hash.replace("#", "") || window.location.pathname.replace("/", "");
+    if (["scale", "anpr", "cloud", "wifi", "telemetry", "config", "admin"].includes(initialHash)) {
+      switchTab(initialHash);
+    } else {
+      switchTab("overview");
+    }
+
+    renderAnprErrors();
+    checkExistingAuth();
+    fetchStatus();
+    setInterval(fetchStatus, 1000);
+    lucide.createIcons();
+  </script>
+</body>
+</html>
