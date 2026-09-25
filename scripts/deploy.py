@@ -13,36 +13,34 @@ EXCLUDES = [
 
 
 def run_cmd(cmd: list[str]) -> None:
-    res = subprocess.run(cmd, check=False)
-    if res.returncode != 0:
+    if (code := subprocess.run(cmd, check=False).returncode) != 0:
         print(f"[Deploy] Command failed: {' '.join(cmd)}", file=sys.stderr)
-        sys.exit(res.returncode)
+        sys.exit(code)
 
 
 def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/client.lic") -> None:
-    tmp_build = "/tmp/hermes_build"
-    print(f"[Deploy] 1. Syncing source to {host}:{tmp_build}...")
-    run_cmd(["rsync", "-avz", "--delete", *EXCLUDES, "./", f"{host}:{tmp_build}/"])
-
-    print(f"[Deploy] 2. Remote building binary on {host} and installing to {target}...")
-    remote_cmds = (
-        "set -e; "
-        "export PATH=\"$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:$PATH\"; "
-        "command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=\"$HOME/.cargo/bin:$PATH\"); "
+    print(f"[Deploy] 1. Preparing {target} and checking uv on {host}...")
+    prep = (
         f"sudo mkdir -p {target} && sudo chown -R $USER:$USER {target}; "
-        f"cd {tmp_build} && uv run python scripts/package.py --install {target}; "
-        f"cd {target} && uv sync; "
-        f"rm -rf {tmp_build}; "
-        f"echo '[Deploy] Source purged from {tmp_build}. Only binary remains at {target}.'; "
-        "(sudo systemctl restart hermes 2>/dev/null || true)"
+        "export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"; "
+        "command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh"
     )
-    run_cmd(["ssh", "-t", host, f"bash -c '{remote_cmds}'"])
-
+    run_cmd(["ssh", "-t", host, f"bash -c '{prep}'"])
+    print(f"[Deploy] 2. Syncing source to {host}:{target}...")
+    run_cmd(["rsync", "-avz", "--delete", *EXCLUDES, "./", f"{host}:{target}/"])
+    print(f"[Deploy] 3. Building native binary on {host} and purging source code...")
+    build = (
+        "set -e; export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"; "
+        f"cd {target} && uv sync && uv run python scripts/build.py --output-dir={target}; "
+        f"find {target} -maxdepth 1 -name '*.py' -delete && find {target}/src -name '*.py' -delete; "
+        f"rm -rf {target}/scripts {target}/tests {target}/docs; "
+        f"echo '[Deploy] Source purged! Only compiled binary remains at {target}.'"
+    )
+    run_cmd(["ssh", "-t", host, f"bash -c '{build}'"])
     if os.path.exists(lic):
-        print(f"[Deploy] 3. Uploading license {lic} -> {target}/data/client.lic...")
+        print(f"[Deploy] 4. Uploading license {lic} -> {target}/data/client.lic...")
         run_cmd(["ssh", host, f"mkdir -p {target}/data"])
         run_cmd(["scp", lic, f"{host}:{target}/data/client.lic"])
-
     print(f"\n[Deploy] Complete! Hermes deployed to {host}:{target} (0 .py files).")
 
 
