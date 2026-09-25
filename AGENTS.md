@@ -81,13 +81,13 @@ For any Python modifications:
 •  Explicitly update `README.md` and relevant guides in `docs/` (such as `docs/ARCHITECTURE.md`) whenever adding, modifying, or removing features, API endpoints, environment variables, architecture patterns, dependencies, or workflows.
 •  Ensure all setup instructions, configuration options, usage examples, and architectural diagrams remain accurate and up-to-date.
 
-## 7. Dependency Management via `uv`
+## 7. Dependency Management & Library Selection via `uv`
 
-*Always use `uv` commands to add or remove dependencies. Never directly edit `pyproject.toml` dependencies.*
+*Always research the modern ecosystem before introducing packages, and use `uv` exclusively.*
 
-•  Use `uv add <package>` to install and record new dependencies.
-•  Use `uv remove <package>` to uninstall and remove dependencies.
-•  Never manually edit the `dependencies` or `dependency-groups` arrays in `pyproject.toml` directly; let `uv` manage dependency specification, lockfile synchronization (`uv.lock`), and virtual environment state.
+•  *Mandatory Web Research for New Libraries*: Before adding any external library, ALWAYS perform a web search to identify the latest, most secure, memory-safe, and actively maintained industry-standard packages in the current year. Do not rely on outdated training memory or legacy packages. Evaluate memory safety (e.g. Rust-backed vs C), active maintenance, vulnerability track records, and supply-chain health.
+•  *Use `uv add` and `uv remove`*: Use `uv add <package>` to install and record new dependencies. Use `uv remove <package>` to uninstall and remove dependencies.
+•  *No Direct Editing of `pyproject.toml`*: Never manually edit the `dependencies` or `dependency-groups` arrays in `pyproject.toml` directly; let `uv` manage dependency specification, lockfile synchronization (`uv.lock`), and virtual environment state.
 
 ## 8. No Backward-Compatibility Shims
 

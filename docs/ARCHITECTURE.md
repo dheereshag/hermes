@@ -298,36 +298,30 @@ Single SpoolWorker (FIFO Sequential Processing)
 
 ---
 
-## 9. Binary Compilation & Bespoke Client Distribution Architecture
+## 9. Binary Compilation & Asymmetric Ed25519 Client Licensing Architecture
 
-To protect intellectual property, secure device credentials, and optimize execution performance on the Raspberry Pi (Cortex-A76), Hermes is compiled ahead-of-time (AOT) into a standalone native binary executable using **Nuitka**:
+To protect intellectual property, eliminate field compilation, and prevent client credential tampering, Hermes uses a **build-once, deploy-everywhere** release model combined with **Ed25519 digital signatures (RFC 8032)**:
 
 ```
-Raspberry Pi Field Deployment Workflow
-       ├── 1. Clone repository to Pi: git clone <repo> hermes
-       ├── 2. Configure Client Parameters in src/config/client_config.py
-       │      (Set DEVICE_ID, DEVICE_KEY, CENTER_ID, MIN_WEIGHT, ANPR_SERVER_URL, baseline URLs)
-       ├── 3. Execute Single Deploy Command: uv run python scripts/deploy.py
-       │      ├── Local Nuitka Compile: main.py + src/ -> native executable binary
-       │      ├── Stages 'hermes' and 'hermes.sh' in root folder
-       │      ├── Purges .git/ (eliminates repository tracking & commit history)
-       │      ├── Purges main.py and all src/**/*.py source files
-       │      └── Purges tests/, docs/, and scripts/
-       └── 4. Production Root on Raspberry Pi:
-              ├── hermes (Compiled native machine-code binary)
-              ├── hermes.sh (Environment runner script setting PYTHONHOME / PYTHONPATH)
-              ├── src/web/templates/ (HTML5 diagnostics UI)
-              ├── src/web/static/ (Offline vendor JS bundles: Tailwind & Lucide)
-              ├── data/ (SQLite local durability database)
-              └── .venv/ (Virtual environment with pre-installed third-party wheels)
+Developer / Build Machine
+       ├── 1. Compile Generic Binary ONCE: uv run python scripts/package.py
+       │      └── Generates: dist/hermes-release.tar.gz (0 .py files, 0 .git)
+       └── 2. Generate Client License: uv run python scripts/keygen.py ...
+              └── Generates: client.lic (Payload + Ed25519 digital signature)
+
+Raspberry Pi Field Deployment (< 5 Seconds)
+       ├── 1. Extract dist/hermes-release.tar.gz to /opt/hermes
+       ├── 2. Place client.lic into /opt/hermes/data/client.lic
+       └── 3. Start Hermes: /opt/hermes/hermes.sh (or via systemd)
 ```
 
-### Runtime Execution Mechanics
-When `hermes.sh` (or `systemd`) runs on the edge device:
-1. The native executable `hermes` executes directly without Python compiling or interpreting any `.py` source code.
-2. All 33 application modules across `src/core`, `src/devices`, `src/integrations`, `src/config`, and `src/web` are pre-compiled into native C machine code embedded directly within the binary.
-3. Flask's application factory serves templates and static assets directly from `src/web/templates` and `src/web/static`.
-4. Zero Python source files exist on the client's device, ensuring maximum IP protection and preventing unauthorized tampering.
+### Runtime Cryptographic Verification
+When Hermes boots on the edge device:
+1. `ConfigManager` reads `data/client.lic`.
+2. Verifies the Ed25519 signature against the embedded company public key (`src/config/license.py`).
+3. If valid, loads `device_id`, `device_key`, `center_id`, `min_weight`, and `anpr_server_url` into memory.
+4. If tampered or invalid, Hermes logs an authentication error and refuses to start.
+5. If absent (in local dev or test environments), falls back to `src/config/client_config.py` defaults.
 
 ---
 

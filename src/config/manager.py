@@ -4,27 +4,40 @@ from __future__ import annotations
 from typing import Any
 
 from src.config import client_config as cc
+from src.config.license import load_client_license
 from src.config.runtime import RuntimeConfig
 
 
 class ConfigManager:
-    def __init__(self, db_path: str | None = None) -> None:
+    def __init__(self, db_path: str | None = None, lic_path: str = "data/client.lic") -> None:
         self.runtime = RuntimeConfig(db_path)
+        self.license = load_client_license(lic_path) or {}
 
     def load_settings(self) -> None:
         self.runtime.reload()
 
     @property
-    def center_id(self) -> int: return cc.CENTER_ID
+    def center_id(self) -> int:
+        return int(self.license.get("center_id", cc.CENTER_ID))
+
     @property
-    def weight_threshold(self) -> float: return cc.MIN_WEIGHT
+    def weight_threshold(self) -> float:
+        return float(self.license.get("min_weight", cc.MIN_WEIGHT))
+
     min_weight = weight_threshold
+
     @property
-    def device_id(self) -> str | int: return cc.DEVICE_ID
+    def device_id(self) -> str | int:
+        return self.license.get("device_id", cc.DEVICE_ID)
+
     @property
-    def device_key(self) -> str: return cc.DEVICE_KEY
+    def device_key(self) -> str:
+        return str(self.license.get("device_key", cc.DEVICE_KEY))
+
     @property
-    def anpr_server_url(self) -> str: return cc.ANPR_SERVER_URL
+    def anpr_server_url(self) -> str:
+        return str(self.license.get("anpr_server_url", cc.ANPR_SERVER_URL))
+
     @property
     def wifi_ssid(self) -> str: return str(self.runtime.get("wifi_ssid", cc.WIFI_SSID))
     @property
@@ -40,14 +53,9 @@ class ConfigManager:
     @property
     def auxiliary_camera_urls(self) -> list[str]: return list(self.runtime.get("auxiliary_camera_urls", cc.AUXILIARY_CAMERA_URLS))
 
-    def update_system_config(self, **kwargs: Any) -> None:
-        self.runtime.update_system(**kwargs)
-
-    def update_wifi_credentials(self, ssid: str, password: str) -> None:
-        self.runtime.update_wifi(ssid, password)
-
-    def clear_wifi_credentials(self) -> None:
-        self.runtime.clear_wifi()
+    def update_system_config(self, **kwargs: Any) -> None: self.runtime.update_system(**kwargs)
+    def update_wifi_credentials(self, s: str, p: str) -> None: self.runtime.update_wifi(s, p)
+    def clear_wifi_credentials(self) -> None: self.runtime.clear_wifi()
 
     def _build_data_dict(self) -> dict[str, Any]:
         return {

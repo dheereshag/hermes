@@ -21,9 +21,6 @@ Use this mode for local development, testing, and debugging directly from Python
 # Install dependencies
 uv sync
 
-# Run verification gates
-uv run ruff check --fix && uv run ty check && uv run pytest
-
 # Start controller
 uv run python main.py
 ```
@@ -44,21 +41,40 @@ uv run python scripts/build.py
 
 ---
 
-### 3. Production Deployment (Raspberry Pi)
+### 3. Production Release & Client Provisioning
 
-Compiles Hermes into a native binary, stages artifacts in the root directory, and **permanently purges `.git/` and all `.py` source code**:
+Hermes uses a **build-once, deploy-everywhere** architecture with Ed25519 digital signatures. Source code never touches client hardware.
 
+#### Step 1: Build Generic Release Package (Run once on Dev Machine)
 ```bash
-# 1. On Pi: Clone repo & configure client credentials
-git clone <repo-url> hermes && cd hermes
-nano src/config/client_config.py
-
-# 2. Run single deployment command (compiles, purges source & .git, starts Hermes)
-uv run python scripts/deploy.py
-# (Or bypass confirmation prompt for unattended setups: uv run python scripts/deploy.py --yes)
+uv run python scripts/package.py
+# Produces dist/hermes-release.tar.gz (0 .py files)
 ```
 
-> **Auto-Start on Boot:** For unattended field deployment, configure systemd to run `/home/pi/hermes/hermes.sh`.
+#### Step 2: Generate Signed Client License (Per Client)
+```bash
+uv run python scripts/keygen.py \
+    --device-id pi1 \
+    --device-key hardware123 \
+    --center-id 5 \
+    --min-weight 70.0 \
+    --anpr-url http://127.0.0.1:8000/recognize \
+    --output client.lic
+```
+
+#### Step 3: Deploy to Raspberry Pi (< 5 Seconds)
+```bash
+# 1. Unpack release package to /opt/hermes
+tar -xzf hermes-release.tar.gz -C /opt/hermes
+
+# 2. Place client license
+cp client.lic /opt/hermes/data/client.lic
+
+# 3. Start Hermes
+cd /opt/hermes && ./hermes.sh
+```
+
+> **Auto-Start on Boot:** For unattended field deployment, configure systemd to run `/opt/hermes/hermes.sh`.
 
 ---
 

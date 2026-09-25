@@ -21,7 +21,8 @@ def get_config_db_path(db_path: str | None = None) -> str:
 
 def init_config_table(db_path: str | None = None) -> None:
     path = get_config_db_path(db_path)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.dirname(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
     with _lock, sqlite3.connect(path) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS runtime_config (key TEXT PRIMARY KEY, val TEXT);")
 
