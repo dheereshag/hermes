@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from src.devices.wifi import (
     connect_to_wifi,
+    get_wifi_interface,
     is_hotspot_active,
     is_wifi_connected,
     start_emergency_hotspot,
@@ -97,6 +98,42 @@ class TestWiFiManager(unittest.TestCase):
     def test_watchdog_start_stop(self):
         start_wifi_watchdog(interval=0.5)
         stop_wifi_watchdog()
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_get_wifi_interface_detected(self, mock_run, mock_nmcli):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "eth0:ethernet\nwlan1:wifi\nlo:loopback\n"
+        mock_run.return_value = mock_res
+
+        self.assertEqual(get_wifi_interface(), "wlan1")
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_get_wifi_interface_fallback_wlan0(self, mock_run, mock_nmcli):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "eth0:ethernet\nlo:loopback\n"
+        mock_run.return_value = mock_res
+
+        self.assertEqual(get_wifi_interface(), "wlan0")
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=False)
+    def test_get_wifi_interface_no_nmcli(self, mock_nmcli):
+        self.assertEqual(get_wifi_interface(), "wlan0")
+
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi._activate_hotspot_connection")
+    def test_start_emergency_hotspot_failure_logs_detail(self, mock_activate, mock_nmcli):
+        import subprocess as sp
+        mock_activate.side_effect = sp.CalledProcessError(
+            4, ["nmcli", "connection", "add"], stderr="Insufficient privileges"
+        )
+        with self.assertLogs("src.devices.wifi", level="ERROR") as cm:
+            success = start_emergency_hotspot("Gluvok-Setup", "gluvok1234")
+            self.assertFalse(success)
+            self.assertTrue(any("Insufficient privileges" in msg for msg in cm.output))
 
 
 if __name__ == "__main__":

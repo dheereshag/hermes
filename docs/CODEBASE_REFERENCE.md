@@ -264,9 +264,10 @@ Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
 
 - **Functions**:
   - **`is_nmcli_available() -> bool`**: Verifies `nmcli` binary exists on the system.
-  - **`is_wifi_connected() -> bool`**: Inspects `nmcli dev` status. Returns `True` only if `wlan0` is connected to an upstream router (excluding our emergency hotspot).
+  - **`get_wifi_interface() -> str`**: Detects active wireless interface name via `nmcli dev` (defaults to `wlan0`).
+  - **`is_wifi_connected() -> bool`**: Inspects `nmcli dev` status. Returns `True` only if the wireless interface is connected to an upstream router (excluding our emergency hotspot).
   - **`is_hotspot_active() -> bool`**: Returns boolean indicating if emergency hotspot is active.
-  - **`start_emergency_hotspot(ssid, password) -> bool`**: Configures `wlan0` in AP mode with shared IPv4 routing (`10.42.0.1`). Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
+  - **`start_emergency_hotspot(ssid, password) -> bool`**: Configures the Wi-Fi interface in AP mode with shared IPv4 routing (`10.42.0.1`), automatically elevating via `sudo -n` if running as an unprivileged service. Allows technicians to connect on-site and configure Wi-Fi via `http://10.42.0.1:8080`.
   - **`stop_emergency_hotspot() -> bool`**: Tears down emergency AP connection.
   - **`connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]`**: Attempts connection to facility router. If connection fails, immediately re-engages the emergency hotspot so technician connectivity is not lost.
   - **`_watchdog_loop(interval: float) -> None`**: Background thread monitoring connection state every 30 seconds, automatically activating or deactivating the hotspot.

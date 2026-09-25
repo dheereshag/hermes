@@ -8,6 +8,7 @@ Uses NetworkManager (nmcli) to detect connection drops and spin up the 'Gluvok-S
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import threading
@@ -32,9 +33,65 @@ def is_nmcli_available() -> bool:
     return shutil.which("nmcli") is not None
 
 
+def _run_nmcli(
+    args: list[str],
+    timeout: float = 10,
+    check: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Runs nmcli command, automatically attempting sudo elevation if unprivileged."""
+    cmd = ["nmcli", *args]
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    is_root = getattr(os, "geteuid", lambda: 0)() == 0
+    if res.returncode != 0 and not is_root and shutil.which("sudo"):
+        sudo_cmd = ["sudo", "-n", "nmcli", *args]
+        sudo_res = subprocess.run(
+            sudo_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        if sudo_res.returncode == 0:
+            return sudo_res
+        if check:
+            raise subprocess.CalledProcessError(
+                sudo_res.returncode,
+                sudo_cmd,
+                sudo_res.stdout,
+                sudo_res.stderr,
+            )
+        return sudo_res
+
+    if check and res.returncode != 0:
+        raise subprocess.CalledProcessError(res.returncode, cmd, res.stdout, res.stderr)
+    return res
+
+
+def get_wifi_interface() -> str:
+    """Detects active Wi-Fi interface name via nmcli or falls back to 'wlan0'."""
+    if not is_nmcli_available():
+        return "wlan0"
+    try:
+        res = subprocess.run(
+            ["nmcli", "-t", "-f", "DEVICE,TYPE", "dev"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if res.returncode == 0:
+            for line in res.stdout.strip().splitlines():
+                parts = line.split(":")
+                if len(parts) >= 2 and parts[1].strip() == "wifi" and (dev := parts[0].strip()):
+                    return dev
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"[WiFi] Error detecting Wi-Fi interface: {e}")
+    return "wlan0"
+
+
 def is_wifi_connected() -> bool:
     """
-    Checks if wlan0 is connected to an active Wi-Fi network (not in AP/hotspot mode).
+    Checks if active Wi-Fi is connected to an external network (not in AP/hotspot mode).
     Returns True if connected to an external Wi-Fi SSID, False otherwise.
     """
     if not is_nmcli_available():
@@ -71,46 +128,35 @@ def is_hotspot_active() -> bool:
     return _hotspot_active
 
 
-def _activate_hotspot_connection(ssid: str, password: str) -> None:
+def _activate_hotspot_connection(ssid: str, password: str, ifname: str | None = None) -> None:
     """Create, configure, and bring up the emergency AP via nmcli."""
-    subprocess.run(
-        ["nmcli", "connection", "delete", HOTSPOT_CON_NAME],
-        capture_output=True,
-        timeout=5,
-        check=False,
-    )
-    subprocess.run(
+    dev = ifname or get_wifi_interface()
+    _run_nmcli(["connection", "delete", HOTSPOT_CON_NAME], timeout=5, check=False)
+    _run_nmcli(
         [
-            "nmcli", "connection", "add",
+            "connection", "add",
             "type", "wifi",
-            "ifname", "wlan0",
+            "ifname", dev,
             "con-name", HOTSPOT_CON_NAME,
-            "autoconnect", "false",
+            "autoconnect", "no",
             "ssid", ssid,
         ],
-        capture_output=True,
         timeout=5,
         check=True,
     )
-    subprocess.run(
+    _run_nmcli(
         [
-            "nmcli", "connection", "modify", HOTSPOT_CON_NAME,
+            "connection", "modify", HOTSPOT_CON_NAME,
             "802-11-wireless.mode", "ap",
             "802-11-wireless.band", "bg",
             "ipv4.method", "shared",
             "wifi-sec.key-mgmt", "wpa-psk",
             "wifi-sec.psk", password,
         ],
-        capture_output=True,
         timeout=5,
         check=True,
     )
-    subprocess.run(
-        ["nmcli", "connection", "up", HOTSPOT_CON_NAME],
-        capture_output=True,
-        timeout=10,
-        check=True,
-    )
+    _run_nmcli(["connection", "up", HOTSPOT_CON_NAME], timeout=10, check=True)
 
 
 def start_emergency_hotspot(
@@ -118,7 +164,7 @@ def start_emergency_hotspot(
     password: str = DEFAULT_HOTSPOT_PASS,
 ) -> bool:
     """
-    Starts the emergency Wi-Fi Access Point (Hotspot) on wlan0 using nmcli.
+    Starts the emergency Wi-Fi Access Point (Hotspot) using nmcli.
     Broadcasts 'Gluvok-Setup' with default IP 10.42.0.1.
     """
     global _hotspot_active
@@ -140,7 +186,10 @@ def start_emergency_hotspot(
             )
             return True
         except (subprocess.SubprocessError, OSError) as e:
-            logger.error(f"[WiFi] Failed to start emergency hotspot: {e}")
+            detail = ""
+            if isinstance(e, subprocess.CalledProcessError) and e.stderr:
+                detail = f" | Detail: {e.stderr.strip()}"
+            logger.error(f"[WiFi] Failed to start emergency hotspot: {e}{detail}")
             return False
 
 
@@ -156,18 +205,21 @@ def stop_emergency_hotspot() -> bool:
             return True
 
         try:
-            subprocess.run(["nmcli", "connection", "down", HOTSPOT_CON_NAME], capture_output=True, timeout=5, check=False)
+            _run_nmcli(["connection", "down", HOTSPOT_CON_NAME], timeout=5, check=False)
             _hotspot_active = False
             logger.info("[WiFi] Emergency Access Point stopped.")
             return True
         except (subprocess.SubprocessError, OSError) as e:
-            logger.error(f"[WiFi] Error stopping emergency hotspot: {e}")
+            detail = ""
+            if isinstance(e, subprocess.CalledProcessError) and e.stderr:
+                detail = f" | Detail: {e.stderr.strip()}"
+            logger.error(f"[WiFi] Error stopping emergency hotspot: {e}{detail}")
             return False
 
 
 def connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]:
     """
-    Attempts to connect wlan0 to the specified Wi-Fi network using nmcli.
+    Attempts to connect to the specified Wi-Fi network using nmcli.
     If connected successfully, tears down the emergency hotspot.
     """
     if not ssid:
@@ -182,13 +234,13 @@ def connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]:
     try:
         # Stop hotspot temporarily to free up the wireless device
         if is_hotspot_active():
-            subprocess.run(["nmcli", "connection", "down", HOTSPOT_CON_NAME], capture_output=True, timeout=5, check=False)
+            _run_nmcli(["connection", "down", HOTSPOT_CON_NAME], timeout=5, check=False)
 
-        cmd = ["nmcli", "dev", "wifi", "connect", ssid]
+        cmd = ["dev", "wifi", "connect", ssid]
         if password:
             cmd.extend(["password", password])
 
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
+        res = _run_nmcli(cmd, timeout=20, check=False)
 
         if res.returncode == 0:
             logger.info(f"[WiFi] Successfully connected to Wi-Fi: '{ssid}'!")
@@ -250,6 +302,7 @@ __all__ = [
     "DEFAULT_HOTSPOT_SSID",
     "HOTSPOT_CON_NAME",
     "connect_to_wifi",
+    "get_wifi_interface",
     "is_hotspot_active",
     "is_nmcli_available",
     "is_wifi_connected",
