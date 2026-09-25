@@ -200,7 +200,7 @@
           <i data-lucide="panel-left" class="w-5 h-5"></i>
         </button>
         <div class="hidden lg:flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <span class="hover:text-foreground cursor-pointer" onclick="switchTab('overview')">Platform</span>
+          <span id="breadcrumb-parent" class="hover:text-foreground cursor-pointer" onclick="switchTab('overview')">Platform</span>
           <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
           <span id="breadcrumb-current-tab" class="text-foreground font-semibold">Overview</span>
         </div>
@@ -267,7 +267,7 @@
           <div onclick="switchTab('cloud')" class="p-5 rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:border-violet-500/40 transition cursor-pointer flex flex-col justify-between space-y-4">
             <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>Cloud Transfer</span>
-              <span id="ov-sb-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">READY</span>
+              <span id="ov-sb-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-muted text-muted-foreground border border-border">CHECKING...</span>
             </div>
             <div>
               <div id="ov-center-id" class="text-base font-bold text-foreground truncate">Center ID: 1</div>
@@ -371,7 +371,7 @@
                 <p class="text-xs text-muted-foreground">Continuous 2s Camera 1 capturing + Parallel auxiliary overview snapshots</p>
               </div>
             </div>
-            <span id="anpr-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ARGUS ONLINE</span>
+            <span id="anpr-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-muted text-muted-foreground border border-border">CHECKING...</span>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="anpr-error-cards">
@@ -488,7 +488,9 @@
                   <i data-lucide="bookmark-check" class="w-3.5 h-3.5 text-emerald-400"></i>
                   Known Saved Networks
                 </span>
-                <span class="text-[10px] text-muted-foreground">Select for 1-click connect</span>
+                <button type="button" onclick="clearWifi()" class="text-[11px] font-medium text-muted-foreground hover:text-destructive transition flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Clear Saved
+                </button>
               </div>
               <div id="saved-wifi-chips" class="flex flex-wrap gap-2 pt-1"></div>
             </div>
@@ -505,12 +507,17 @@
                     <i data-lucide="key-round" class="w-3 h-3"></i> Saved in Vault
                   </span>
                 </div>
-                <input id="wifi-password" type="password" placeholder="••••••••" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition" />
+                <div class="relative">
+                  <input id="wifi-password" type="password" placeholder="••••••••" class="w-full px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring transition pr-10" />
+                  <button type="button" onclick="toggleWifiFormPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                    <i id="wifi-eye-icon" data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                </div>
               </div>
               <div id="wifi-alert" class="hidden"></div>
               <div class="flex items-center gap-3">
                 <button type="submit" id="save-wifi-btn" class="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition">Save & Connect</button>
-                <button type="button" onclick="clearWifi()" class="px-4 py-2 rounded-lg border border-input hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition">Clear All</button>
+                <button type="button" id="clear-wifi-btn" onclick="clearWifi()" class="hidden px-4 py-2 rounded-lg border border-input hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-destructive transition">Clear All</button>
               </div>
             </form>
           </div>
@@ -800,15 +807,26 @@
       }
 
       // Update breadcrumbs
+      const groups = {
+        overview: "Platform",
+        scale: "Platform",
+        anpr: "Platform",
+        cloud: "Communications",
+        telemetry: "Communications",
+        wifi: "Admin Panel",
+        config: "Admin Panel",
+      };
       const titles = {
         overview: "Overview",
         scale: "Scale Indicator",
         anpr: "ANPR & Cameras",
         cloud: "Cloud Transfer",
-        wifi: "Admin Wi-Fi Setup",
+        wifi: "Wi-Fi Setup",
         telemetry: "Telemetry Logs",
-        config: "Admin System Config"
+        config: "System Config"
       };
+      const parentEl = document.getElementById("breadcrumb-parent");
+      if (parentEl) parentEl.textContent = groups[tabId] || "Platform";
       document.getElementById("breadcrumb-current-tab").textContent = titles[tabId] || tabId;
 
       // Toggle views
@@ -957,6 +975,19 @@
     function toggleWifiPasswordVisibility() {
       const input = document.getElementById('wifi-login-password');
       if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function toggleWifiFormPasswordVisibility() {
+      const input = document.getElementById('wifi-password');
+      const icon = document.getElementById('wifi-eye-icon');
+      if (input) {
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        if (icon) {
+          icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+          lucide.createIcons();
+        }
+      }
     }
 
     async function loadSystemConfig() {
@@ -1194,9 +1225,13 @@
         const data = await res.json();
         const section = document.getElementById("saved-wifi-section");
         const container = document.getElementById("saved-wifi-chips");
+        const clearBtn = document.getElementById("clear-wifi-btn");
         if (!section || !container) return;
 
-        if (res.ok && data.success && data.networks && data.networks.length > 0) {
+        const hasSaved = Boolean(res.ok && data.success && data.networks && data.networks.length > 0);
+        if (clearBtn) clearBtn.classList.toggle("hidden", !hasSaved);
+
+        if (hasSaved) {
           section.classList.remove("hidden");
           container.innerHTML = data.networks.map(n => {
             const safeSsid = escapeHtml(n.ssid);
@@ -1217,6 +1252,8 @@
         }
       } catch (e) {
         console.debug("Failed to fetch saved networks", e);
+        const clearBtn = document.getElementById("clear-wifi-btn");
+        if (clearBtn) clearBtn.classList.add("hidden");
       }
     }
 
@@ -1283,115 +1320,166 @@
       `).join("");
     }
 
+    function updateScaleUI(data) {
+      if (data.scale) {
+        const w = (data.scale.current_weight || 0).toFixed(3);
+        const ovWeight = document.getElementById("ov-weight");
+        const spWeight = document.getElementById("scale-page-weight");
+        if (ovWeight) ovWeight.innerHTML = `${w} <span class="text-sm font-normal text-muted-foreground">kg</span>`;
+        if (spWeight) spWeight.innerHTML = `${w} <span class="text-2xl font-normal text-zinc-500">kg</span>`;
+
+        const state = data.scale.state || "IDLE";
+        let stateClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-secondary text-foreground";
+        if (state === "STABLE_RECORDED") {
+          stateClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        } else if (state === "STABILIZING") {
+          stateClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+        }
+        const ovScaleState = document.getElementById("ov-scale-state");
+        const scaleStateDetail = document.getElementById("scale-state-detail");
+        if (ovScaleState) {
+          ovScaleState.textContent = state;
+          ovScaleState.className = stateClass;
+        }
+        if (scaleStateDetail) {
+          scaleStateDetail.textContent = "STATE: " + state;
+          scaleStateDetail.className = stateClass.replace("px-2 py-0.5", "px-2.5 py-1");
+        }
+      }
+      if (data.config) {
+        const thresh = document.getElementById("scale-thresh-disp");
+        const centerId = data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1);
+        if (thresh) thresh.textContent = `${(data.config.min_weight || 50).toFixed(1)} kg`;
+        const ovCenter = document.getElementById("ov-center-id");
+        const cloudCenter = document.getElementById("cloud-center-id-val");
+        if (ovCenter) ovCenter.textContent = `Center ID: ${centerId}`;
+        if (cloudCenter) cloudCenter.textContent = centerId;
+      }
+    }
+
+    function updateCloudAndArgusUI(data) {
+      const cloudPill = document.getElementById("cloud-live-status-pill");
+      const ovSbBadge = document.getElementById("ov-sb-badge");
+      const cloudConfigured = Boolean(data.cloud && data.cloud.configured);
+      const cloudClass = cloudConfigured
+        ? "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+        : "px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+      const cloudText = cloudConfigured ? "CONFIGURED" : "NOT CONFIGURED";
+      if (cloudPill) {
+        cloudPill.className = cloudClass.replace("px-2 py-0.5", "px-2.5 py-1");
+        cloudPill.textContent = cloudText;
+      }
+      if (ovSbBadge) {
+        ovSbBadge.className = cloudClass;
+        ovSbBadge.textContent = cloudText;
+      }
+
+      const argusBadge = document.getElementById("ov-argus-badge");
+      const anprPill = document.getElementById("anpr-live-status-pill");
+      const argusOnline = Boolean(data.argus && data.argus.online);
+      if (argusBadge) {
+        argusBadge.className = argusOnline
+          ? "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+          : "px-2 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
+        argusBadge.textContent = argusOnline ? "ONLINE" : "OFFLINE";
+      }
+      if (anprPill) {
+        anprPill.className = argusOnline
+          ? "px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20"
+          : "px-2.5 py-1 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
+        anprPill.textContent = argusOnline ? "ARGUS ONLINE" : "ARGUS OFFLINE";
+      }
+    }
+
+    function updateNetworkUI(data) {
+      const ipDisplay = document.getElementById("network-ip-display");
+      const hsBadge = document.getElementById("hotspot-badge");
+      const ovWifiBadge = document.getElementById("ov-wifi-badge");
+      const wifiPill = document.getElementById("wifi-live-status-pill");
+      const ovWifiSsid = document.getElementById("ov-wifi-ssid");
+
+      const isWifiConnected = Boolean(data.wifi && data.wifi.connected);
+      const isHotspotActive = Boolean(data.wifi && data.wifi.hotspot_active);
+
+      if (isHotspotActive) {
+        if (hsBadge) hsBadge.classList.remove("hidden");
+        if (ipDisplay) ipDisplay.textContent = "Hotspot: 10.42.0.1";
+      } else {
+        if (hsBadge) hsBadge.classList.add("hidden");
+        if (ipDisplay) ipDisplay.textContent = isWifiConnected ? "Wi-Fi Connected" : "Local Network";
+      }
+
+      let badgeText = "DISCONNECTED";
+      let badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
+      let displaySsid = "Disconnected";
+
+      if (isWifiConnected) {
+        badgeText = "CONNECTED";
+        badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        displaySsid = (data.config && data.config.wifi_ssid) || "Wi-Fi Connected";
+      } else if (isHotspotActive) {
+        badgeText = "HOTSPOT ACTIVE";
+        badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+        displaySsid = "Hotspot: hermes";
+      }
+
+      if (ovWifiBadge) {
+        ovWifiBadge.textContent = badgeText;
+        ovWifiBadge.className = badgeClass;
+      }
+      if (wifiPill) {
+        wifiPill.textContent = badgeText;
+        wifiPill.className = badgeClass.replace("px-2 py-0.5", "px-2.5 py-1");
+      }
+      if (ovWifiSsid) ovWifiSsid.textContent = displaySsid;
+    }
+
+    function updateSessionUI(data) {
+      if (!data.latest_weighment || !data.latest_weighment.session_id) return;
+      const lw = data.latest_weighment;
+      const plateEl = document.getElementById("ov-plate");
+      if (plateEl) {
+        const plateVal = lw.plate || "READY";
+        plateEl.textContent = plateVal;
+        if (plateVal.startsWith("REJECTED_") || plateVal === "NO_PLATE_DETECTED") {
+          plateEl.className = "text-2xl font-extrabold font-mono text-amber-400 mt-1";
+        } else if (plateVal === "READY") {
+          plateEl.className = "text-2xl font-extrabold font-mono text-sky-400 mt-1";
+        } else {
+          plateEl.className = "text-2xl font-extrabold font-mono text-emerald-400 mt-1";
+        }
+      }
+      const weightEl = document.getElementById("ov-confirmed-weight");
+      const sessionEl = document.getElementById("ov-session-id");
+      const timeEl = document.getElementById("ov-last-time");
+      if (weightEl) weightEl.textContent = (lw.weight || 0).toFixed(3) + " kg";
+      if (sessionEl) sessionEl.textContent = lw.session_id;
+      if (timeEl) timeEl.textContent = lw.timestamp ? "Captured at " + lw.timestamp : "Just now";
+    }
+
+    function updateTelemetryUI(data) {
+      if (!data.events || data.events.length === 0) return;
+      const logDiv = document.getElementById("events-log");
+      if (!logDiv) return;
+      logDiv.innerHTML = data.events.map(ev => `
+        <div class="flex items-start gap-2">
+          <span class="text-zinc-600 flex-shrink-0">[${ev.time || 'NOW'}]</span>
+          <span class="text-emerald-400 font-bold flex-shrink-0">[${ev.source || 'SYSTEM'}]</span>
+          <span class="text-zinc-300 break-words">${ev.message}</span>
+        </div>
+      `).join("");
+    }
+
     async function fetchStatus(manual = false) {
       try {
         const res = await fetch("/api/status");
         if (!res.ok) return;
         const data = await res.json();
-
-        // Scale
-        if (data.scale) {
-          const w = (data.scale.current_weight || 0).toFixed(3);
-          document.getElementById("ov-weight").innerHTML = `${w} <span class="text-sm font-normal text-muted-foreground">kg</span>`;
-          document.getElementById("scale-page-weight").innerHTML = `${w} <span class="text-2xl font-normal text-zinc-500">kg</span>`;
-          document.getElementById("ov-scale-state").textContent = data.scale.state || "IDLE";
-          document.getElementById("scale-state-detail").textContent = "STATE: " + (data.scale.state || "IDLE");
-        }
-
-        // Config & Center
-        if (data.config) {
-          document.getElementById("scale-thresh-disp").textContent = `${(data.config.min_weight || 50).toFixed(1)} kg`;
-          document.getElementById("ov-center-id").textContent = `Center ID: ${data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1)}`;
-          document.getElementById("cloud-center-id-val").textContent = data.cloud && data.cloud.center_id ? data.cloud.center_id : (data.config.center_id || 1);
-        }
-
-        // Cloud status
-        const cloudPill = document.getElementById("cloud-live-status-pill");
-        if (cloudPill) {
-          if (data.cloud && data.cloud.configured) {
-            cloudPill.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-            cloudPill.textContent = "CONFIGURED";
-          } else {
-            cloudPill.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
-            cloudPill.textContent = "NOT CONFIGURED";
-          }
-        }
-
-        // Argus & Cloud
-        const argusBadge = document.getElementById("ov-argus-badge");
-        if (data.argus && data.argus.online) {
-          argusBadge.className = "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-          argusBadge.textContent = "ONLINE";
-        } else {
-          argusBadge.className = "px-2 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
-          argusBadge.textContent = "OFFLINE";
-        }
-
-        // Network / IP & Wi-Fi Dynamic Badges
-        const ipDisplay = document.getElementById("network-ip-display");
-        const hsBadge = document.getElementById("hotspot-badge");
-        const ovWifiBadge = document.getElementById("ov-wifi-badge");
-        const wifiPill = document.getElementById("wifi-live-status-pill");
-        const ovWifiSsid = document.getElementById("ov-wifi-ssid");
-
-        const isWifiConnected = Boolean(data.wifi && data.wifi.connected);
-        const isHotspotActive = Boolean(data.wifi && data.wifi.hotspot_active);
-
-        if (isHotspotActive) {
-          hsBadge.classList.remove("hidden");
-          ipDisplay.textContent = "Hotspot: 10.42.0.1";
-        } else {
-          hsBadge.classList.add("hidden");
-          ipDisplay.textContent = isWifiConnected ? "Wi-Fi Connected" : "Local Network";
-        }
-
-        let badgeText = "DISCONNECTED";
-        let badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive border border-destructive/20";
-        let displaySsid = "Disconnected";
-
-        if (isWifiConnected) {
-          badgeText = "CONNECTED";
-          badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-          displaySsid = (data.config && data.config.wifi_ssid) || "Wi-Fi Connected";
-        } else if (isHotspotActive) {
-          badgeText = "HOTSPOT ACTIVE";
-          badgeClass = "px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
-          displaySsid = "Hotspot: hermes";
-        }
-
-        if (ovWifiBadge) {
-          ovWifiBadge.textContent = badgeText;
-          ovWifiBadge.className = badgeClass;
-        }
-        if (wifiPill) {
-          wifiPill.textContent = badgeText;
-          wifiPill.className = badgeClass.replace("px-2 py-0.5", "px-2.5 py-1");
-        }
-        if (ovWifiSsid) {
-          ovWifiSsid.textContent = displaySsid;
-        }
-
-        // Latest Session
-        if (data.latest_weighment && data.latest_weighment.session_id) {
-          const lw = data.latest_weighment;
-          document.getElementById("ov-plate").textContent = lw.plate || "READY";
-          document.getElementById("ov-confirmed-weight").textContent = (lw.weight || 0).toFixed(3) + " kg";
-          document.getElementById("ov-session-id").textContent = lw.session_id;
-          document.getElementById("ov-last-time").textContent = lw.timestamp ? "Captured at " + lw.timestamp : "Just now";
-        }
-
-        // Telemetry Feed
-        if (data.events && data.events.length > 0) {
-          const logDiv = document.getElementById("events-log");
-          logDiv.innerHTML = data.events.map(ev => `
-            <div class="flex items-start gap-2">
-              <span class="text-zinc-600 flex-shrink-0">[${ev.time || 'NOW'}]</span>
-              <span class="text-emerald-400 font-bold flex-shrink-0">[${ev.source || 'SYSTEM'}]</span>
-              <span class="text-zinc-300 break-words">${ev.message}</span>
-            </div>
-          `).join("");
-        }
-
+        updateScaleUI(data);
+        updateCloudAndArgusUI(data);
+        updateNetworkUI(data);
+        updateSessionUI(data);
+        updateTelemetryUI(data);
       } catch (err) {
         console.warn("Status fetch error:", err);
       }
@@ -1404,6 +1492,17 @@
     } else {
       switchTab("overview");
     }
+
+    // Wi-Fi form auto-dismiss vault badge on input
+    document.getElementById("wifi-ssid")?.addEventListener("input", () => {
+      document.getElementById("wifi-vault-badge")?.classList.add("hidden");
+    });
+    document.getElementById("wifi-password")?.addEventListener("input", (e) => {
+      document.getElementById("wifi-vault-badge")?.classList.add("hidden");
+      if (e.target.value.length === 0) {
+        e.target.placeholder = "••••••••";
+      }
+    });
 
     renderAnprErrors();
     checkExistingAuth();

@@ -42,6 +42,17 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("NO_PLATE_DETECTED", html)
         self.assertIn("REJECTED_HUMAN_DETECTED", html)
 
+    def test_index_html_ui_consistency_elements(self):
+        res = self.client.get("/")
+        html = res.get_data(as_text=True)
+        self.assertIn('id="clear-wifi-btn"', html)
+        self.assertIn("toggleWifiFormPasswordVisibility", html)
+        self.assertIn('id="wifi-vault-badge"', html)
+        self.assertIn('id="wifi-eye-icon"', html)
+        self.assertIn('id="breadcrumb-parent"', html)
+        self.assertIn('id="ov-sb-badge"', html)
+        self.assertIn('id="anpr-live-status-pill"', html)
+
     def test_static_assets_served(self):
         res_tw = self.client.get("/static/tailwindcss.js")
         self.assertEqual(res_tw.status_code, 200)
