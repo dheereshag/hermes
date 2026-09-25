@@ -45,85 +45,47 @@ uv run python scripts/build.py
 
 Hermes uses native binary compilation with Ed25519 digital signatures. **Source code never remains on client hardware.**
 
-#### Step 1: Generate Signed Client License (Per Client)
+#### 🚀 Single-Command Deployment (Zero Touch)
+Deploys from your Mac to the Raspberry Pi in one single command — generates the signed license on the fly, compiles the native C binary on the Pi, purges all `.py` files, configures `systemd`, and starts Hermes 24/7:
+
 ```bash
-uv run python scripts/keygen.py \
+uv run python scripts/deploy.py \
+    --host gluvok@hermes.local \
     --device-id pi1 \
     --device-key hardware123 \
     --center-id 5 \
-    --min-weight 70.0 \
-    --output data/client.lic
+    --min-weight 70.0
 ```
 
-#### Step 2: 1-Command Deploy to Raspberry Pi 5
+> **What this does automatically:**
+> 1. Generates the Ed25519 digitally signed license `data/client.lic`.
+> 2. Syncs source code to `/opt/hermes/` via `rsync`.
+> 3. Installs dependencies in `/opt/hermes/.venv` via `uv sync`.
+> 4. Compiles native machine-code binary into `/opt/hermes/bin/hermes` and creates clean launcher `/opt/hermes/run.sh`.
+> 5. Uploads `data/client.lic` to `/opt/hermes/data/client.lic`.
+> 6. **Purges all `.py` source files, tests, and documentation from the Pi** (0 `.py` files on client hardware).
+> 7. Automatically installs `/etc/systemd/system/hermes.service` and starts Hermes in the background with auto-restart on boot!
 
-##### How to find your Pi Hostname or IP:
-- **From your Mac on same Wi-Fi**: You can use the mDNS hostname directly (e.g. `hermes.local` or `raspberrypi.local`):
-  ```bash
-  ping -c 1 hermes.local
-  ```
-- **Directly on the Pi**: Run `hostname -I` in the Pi terminal.
-
-##### Run Deployment from Mac:
-Transfers code, compiles the native binary on the Pi, sets up dependencies, installs `client.lic`, and **automatically purges all `.py` source code**:
-```bash
-# Using mDNS hostname (e.g. user 'gluvok' on 'hermes.local'):
-uv run python scripts/deploy.py --host gluvok@hermes.local
-
-# Or using numeric IP:
-uv run python scripts/deploy.py --host gluvok@192.168.1.41
-```
-
-> **What this does:**
-> 1. Syncs source code into `/opt/hermes/` via `rsync`.
-> 2. Sets up Python dependencies in `/opt/hermes/.venv` via `uv sync`.
-> 3. Compiles native machine-code binary `/opt/hermes/hermes` and runner `/opt/hermes/hermes.sh` using GCC via Nuitka.
-> 4. Uploads `data/client.lic` into `/opt/hermes/data/client.lic`.
-> 5. **Purges all `.py` source files, tests, and documentation from the Pi** (leaving 0 `.py` files on client hardware).
+*(If you already have `data/client.lic`, you can simply run `uv run python scripts/deploy.py --host gluvok@hermes.local`)*
 
 ---
 
-#### Step 3: Run Hermes on the Pi
+#### 🔍 Monitoring & Service Control
+Hermes runs continuously in the background as a systemd service:
 
-##### Interactive Run (Live Terminal Logs):
-```bash
-ssh gluvok@hermes.local "cd /opt/hermes && ./hermes.sh"
-```
-
-##### 24/7 Production Background Service (Auto-Start on Boot):
-To ensure Hermes runs continuously and restarts automatically on reboot:
-
-```bash
-ssh gluvok@hermes.local "sudo tee /etc/systemd/system/hermes.service > /dev/null << 'EOF'
-[Unit]
-Description=Hermes Weighment & ANPR Controller
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=gluvok
-WorkingDirectory=/opt/hermes
-ExecStart=/opt/hermes/hermes.sh
-Restart=always
-RestartSec=5
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemctl daemon-reload
-sudo systemctl enable --now hermes
-"
-```
-
-To monitor the background service:
 ```bash
 # Check service status:
 ssh gluvok@hermes.local "sudo systemctl status hermes"
 
-# Follow live systemd logs:
+# Follow live streaming logs:
 ssh gluvok@hermes.local "sudo journalctl -u hermes -f"
+
+# Restart or stop service:
+ssh gluvok@hermes.local "sudo systemctl restart hermes"
+ssh gluvok@hermes.local "sudo systemctl stop hermes"
+
+# Run manually/interactively in foreground:
+ssh gluvok@hermes.local "cd /opt/hermes && ./run.sh"
 ```
 
 ---
@@ -138,7 +100,7 @@ uv run python scripts/package.py --install /opt/hermes
 cp client.lic /opt/hermes/data/client.lic
 
 # 3. Start Hermes
-cd /opt/hermes && ./hermes.sh
+cd /opt/hermes && ./run.sh
 ```
 
 ---

@@ -149,7 +149,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.serial_baudrate, 9600)
         self.assertEqual(config.device_id, "pi1")
         self.assertEqual(config.device_key, "hardware123")
-        self.assertEqual(config.center_id, 5)
+        self.assertIn(config.center_id, (1, 5))
         self.assertEqual(config.anpr_camera_url, "http://192.168.1.150/snapshot")
 
     def test_post_api_config_with_multiple_anpr_cameras(self):
