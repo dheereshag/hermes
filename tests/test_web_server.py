@@ -52,6 +52,12 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn('id="breadcrumb-parent"', html)
         self.assertIn('id="ov-sb-badge"', html)
         self.assertIn('id="anpr-live-status-pill"', html)
+        self.assertIn('id="admin-login-overlay"', html)
+        self.assertIn('id="admin-login-userid"', html)
+        self.assertIn('id="admin-login-password"', html)
+        self.assertIn("handleAdminLogin", html)
+        self.assertNotIn('id="wifi-login-overlay"', html)
+        self.assertNotIn('id="config-login-overlay"', html)
 
     def test_static_assets_served(self):
         res_tw = self.client.get("/static/tailwindcss.js")
