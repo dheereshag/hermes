@@ -106,38 +106,25 @@ def status():
     return jsonify({
         "status": "healthy",
         "scale": {
-            "port": config.serial_port,
-            "baudrate": config.serial_baudrate,
             "state": get_scale_state().name,
             "current_weight": round(get_current_weight(), 3),
         },
         "argus": {
-            "url": target_argus_url,
             "online": argus_online,
         },
         "cloud": {
             "center_id": config.center_id,
             "configured": bool(config.device_id and config.device_key),
         },
-        "cameras": {
-            "cam1_url": config.anpr_camera_url,
-            "anpr_urls": config.anpr_camera_urls,
-            "auxiliary_urls": config.auxiliary_camera_urls,
-        },
         "wifi": {
             "connected": is_wifi_connected(),
             "hotspot_active": is_hotspot_active(),
+            "ssid": config.wifi_ssid,
         },
         "config": {
             "wifi_ssid": config.wifi_ssid,
             "center_id": config.center_id,
             "min_weight": config.weight_threshold,
-            "serial_port": config.serial_port,
-            "serial_baudrate": config.serial_baudrate,
-            "anpr_camera_url": config.anpr_camera_url,
-            "anpr_camera_urls": config.anpr_camera_urls,
-            "auxiliary_camera_urls": config.auxiliary_camera_urls,
-            "anpr_server_url": config.anpr_server_url,
         },
         "latest_weighment": get_latest_weighment(),
         "spool": get_spool_stats(),
@@ -146,8 +133,8 @@ def status():
     }), 200
 
 
-
 @api_bp.route("/config", methods=["GET"])
+@auth_required
 def get_config():
     """Returns current system configuration values."""
     return jsonify({

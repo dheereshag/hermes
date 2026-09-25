@@ -2,6 +2,7 @@ from src.devices.camera import (
     capture_auxiliary_snapshots,
     fetch_image_bytes,
 )
+from src.devices.led import LEDColor, led_controller
 from src.devices.scale import (
     ScaleUARTReader,
     get_current_baudrate,
@@ -22,6 +23,7 @@ from src.devices.wifi import (
 )
 
 __all__ = [
+    "LEDColor",
     "ScaleUARTReader",
     "capture_auxiliary_snapshots",
     "connect_to_wifi",
@@ -34,8 +36,10 @@ __all__ = [
     "is_hotspot_active",
     "is_nmcli_available",
     "is_wifi_connected",
+    "led_controller",
     "start_emergency_hotspot",
     "start_wifi_watchdog",
     "stop_emergency_hotspot",
     "stop_wifi_watchdog",
 ]
+

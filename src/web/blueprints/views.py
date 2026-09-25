@@ -14,6 +14,7 @@ PAGE_ROUTES = (
     "/telemetry",
     "/errors",
     "/config",
+    "/admin",
 )
 
 

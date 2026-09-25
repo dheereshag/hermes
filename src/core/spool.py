@@ -13,6 +13,7 @@ import threading
 from typing import Any
 
 from src.config.constants import (
+    LED_CLOUD_SUCCESS_DURATION,
     SPOOL_LEASE_DURATION_S,
     SPOOL_WORKER_POLL_INTERVAL,
 )
@@ -102,6 +103,8 @@ class SpoolWorker:
         if success:
             mark_spool_acknowledged(session_id, entry_id)
             record_system_event("SPOOL", f"Session {session_id} uploaded to cloud -> Entry #{entry_id}")
+            from src.devices import led_controller
+            led_controller.trigger_cloud_success(LED_CLOUD_SUCCESS_DURATION)
             return
 
         # Handle ambiguous ReadTimeout: Did cloud receive and commit before the connection dropped?
@@ -118,6 +121,8 @@ class SpoolWorker:
                     "SPOOL",
                     f"Session {session_id} verified in cloud as #{verified_entry_id}. Duplicate avoided.",
                 )
+                from src.devices import led_controller
+                led_controller.trigger_cloud_success(LED_CLOUD_SUCCESS_DURATION)
                 return
 
         # Terminal client errors (400 Bad Request, 422 Unprocessable Entity)
