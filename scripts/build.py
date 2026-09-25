@@ -1,40 +1,52 @@
-"""build.py — Local Nuitka compilation script for bespoke client builds."""
+"""build.py — Local Nuitka compilation script for Hermes native binary."""
 from __future__ import annotations
 
-import glob
+import argparse
 import os
 import subprocess
 import sys
 
 
-def build_client_package(output_dir: str = "compiled_dist") -> int:
-    """Compiles src/ package into a native C-extension shared library."""
+def build_binary(output_dir: str = "dist") -> int:
+    """Compiles main.py and src/ into a native executable binary."""
     os.makedirs(output_dir, exist_ok=True)
     cmd = [
         sys.executable,
         "-m",
         "nuitka",
-        "--module",
         "--include-package=src",
         "--nofollow-imports",
+        "--include-package-data=src.web",
         "--remove-output",
-        "--lto=yes",
         "--python-flag=no_docstrings",
         f"--output-dir={output_dir}",
-        "src",
+        "--output-filename=hermes",
+        "main.py",
     ]
-    print(f"[Build] Executing: {' '.join(cmd)}")
-    result = subprocess.run(cmd, check=False)
-    if result.returncode != 0:
+    print(f"[Build] Compiling Hermes native binary to '{output_dir}/'...")
+    res = subprocess.run(cmd, check=False)
+    if res.returncode != 0:
         print("[Build] Compilation failed!", file=sys.stderr)
-        return result.returncode
+        return res.returncode
 
-    artifacts = glob.glob(os.path.join(output_dir, "src*.so"))
-    print(f"\n[Build] Success! Compiled native artifact(s): {artifacts}")
-    print("[Build] To run with compiled module: cp compiled_dist/src*.so . && uv run python main.py")
+    print(f"\n[Build] Success! Binary created at: {output_dir}/hermes")
     return 0
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Hermes native compiler")
+    parser.add_argument("--output-dir", default="dist", help="Output directory")
+    parser.add_argument("--run", action="store_true", help="Run after build")
+    args = parser.parse_args()
+
+    code = build_binary(args.output_dir)
+    if code == 0 and args.run:
+        script = os.path.join(args.output_dir, "hermes.sh")
+        target = script if os.path.exists(script) else os.path.join(args.output_dir, "hermes")
+        print(f"[Build] Launching {target}...\n")
+        sys.exit(subprocess.run([target], check=False).returncode)
+    sys.exit(code)
+
+
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else "compiled_dist"
-    sys.exit(build_client_package(out))
+    main()

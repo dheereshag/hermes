@@ -15,3 +15,7 @@ data/
 # Compiled binaries & extensions
 *.so
 compiled_dist/
+dist/
+build_tmp/
+hermes
+hermes.sh

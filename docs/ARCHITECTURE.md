@@ -300,28 +300,34 @@ Single SpoolWorker (FIFO Sequential Processing)
 
 ## 9. Binary Compilation & Bespoke Client Distribution Architecture
 
-To protect intellectual property, secure device credentials, and optimize execution performance on the Raspberry Pi (Cortex-A76), Hermes is compiled ahead-of-time (AOT) per-client using **Nuitka**:
+To protect intellectual property, secure device credentials, and optimize execution performance on the Raspberry Pi (Cortex-A76), Hermes is compiled ahead-of-time (AOT) into a standalone native binary executable using **Nuitka**:
 
 ```
-Developer Machine / Target Pi
-       ├── 1. Configure Client Parameters in src/config/client_config.py
+Raspberry Pi Field Deployment Workflow
+       ├── 1. Clone repository to Pi: git clone <repo> hermes
+       ├── 2. Configure Client Parameters in src/config/client_config.py
        │      (Set DEVICE_ID, DEVICE_KEY, CENTER_ID, MIN_WEIGHT, ANPR_SERVER_URL, baseline URLs)
-       ├── 2. Verification Gate: uv run pytest
-       ├── 3. Local Nuitka Compile: uv run python scripts/build.py
-       │      └── Generates: compiled_dist/src.*.so (ELF 64-bit LSB shared object)
-       └── 4. Deployment Package:
-              ├── src.*.so (Compiled C-extension module)
-              ├── main.py (Application bootstrap & graceful shutdown handler)
+       ├── 3. Execute Single Deploy Command: uv run python scripts/deploy.py
+       │      ├── Local Nuitka Compile: main.py + src/ -> native executable binary
+       │      ├── Stages 'hermes' and 'hermes.sh' in root folder
+       │      ├── Purges .git/ (eliminates repository tracking & commit history)
+       │      ├── Purges main.py and all src/**/*.py source files
+       │      └── Purges tests/, docs/, and scripts/
+       └── 4. Production Root on Raspberry Pi:
+              ├── hermes (Compiled native machine-code binary)
+              ├── hermes.sh (Environment runner script setting PYTHONHOME / PYTHONPATH)
               ├── src/web/templates/ (HTML5 diagnostics UI)
               ├── src/web/static/ (Offline vendor JS bundles: Tailwind & Lucide)
-              └── pyproject.toml / uv.lock (Reproducible runtime dependencies)
+              ├── data/ (SQLite local durability database)
+              └── .venv/ (Virtual environment with pre-installed third-party wheels)
 ```
 
-### Runtime Loading Mechanics
-When `uv run python main.py` is invoked on the edge device:
-1. The Python 3.14 runtime detects the native `src.*.so` module in the root directory.
-2. Python loads `src` directly from the shared library rather than interpreting raw `.py` source scripts.
-3. Flask's application factory resolves Jinja templates via `src/web/templates` and static assets via `src/web/static` relative to `__file__`, providing full offline web console capabilities without internet dependency.
+### Runtime Execution Mechanics
+When `hermes.sh` (or `systemd`) runs on the edge device:
+1. The native executable `hermes` executes directly without Python compiling or interpreting any `.py` source code.
+2. All 33 application modules across `src/core`, `src/devices`, `src/integrations`, `src/config`, and `src/web` are pre-compiled into native C machine code embedded directly within the binary.
+3. Flask's application factory serves templates and static assets directly from `src/web/templates` and `src/web/static`.
+4. Zero Python source files exist on the client's device, ensuring maximum IP protection and preventing unauthorized tampering.
 
 ---
 
