@@ -41,10 +41,13 @@ def _normalize_plate_value(plate_val: object) -> str | None:
 
 
 def _plate_from_results_list(data: dict) -> tuple[str | None, str] | None:
-    """Extract plate from Argus `results[]` list.
+    """Extract plate from Argus `results[]` list sequentially from index 0.
 
-    If multiple vehicles are detected, the first vehicle (results[0]) is strictly considered.
-    Returns (plate, "SUCCESS"), (None, "NO_PLATE_DETECTED"), or None if 'results' not in data.
+    Processes results strictly in sequential order (index 0 has highest priority).
+    If index 0 contains a valid/non-null plate, it is returned immediately.
+    If index 0 has null/empty/invalid plate, continues sequentially (index 1, 2, ...).
+    The first valid plate encountered in array order is selected without sorting.
+    If none of the results contain a valid plate, returns (None, "NO_PLATE_DETECTED").
     """
     if "results" not in data:
         return None
@@ -53,26 +56,23 @@ def _plate_from_results_list(data: dict) -> tuple[str | None, str] | None:
     if not isinstance(results, list) or len(results) == 0:
         return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
 
-    first_item = results[0]
-    if not isinstance(first_item, dict):
-        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
-
-    plate_clean = _normalize_plate_value(first_item.get("plate"))
-    if not plate_clean:
-        logger.info("[ANPR] Primary vehicle (first in array) has no readable plate.")
-        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
-
     exec_time = data.get("execution_time_ms", "N/A")
-    vtype = first_item.get("vehicle_type") or "vehicle"
-    conf = first_item.get("confidence")
-    conf_str = f", conf={conf:.4f}" if isinstance(conf, (int, float)) else ""
-    multi_info = f" [selected vehicle 1 of {len(results)}]" if len(results) > 1 else ""
+    for idx, item in enumerate(results):
+        if not isinstance(item, dict):
+            continue
+        plate_clean = _normalize_plate_value(item.get("plate"))
+        if plate_clean:
+            vtype = item.get("vehicle_type") or "vehicle"
+            conf = item.get("confidence")
+            conf_str = f", conf={conf:.4f}" if isinstance(conf, (int, float)) else ""
+            logger.info(
+                f"[ANPR] Argus recognized sequential plate: '{plate_clean}' "
+                f"({vtype}{conf_str}, {exec_time}ms, priority index {idx} of {len(results)})"
+            )
+            return plate_clean, "SUCCESS"
 
-    logger.info(
-        f"[ANPR] Argus recognized primary plate: '{plate_clean}' "
-        f"({vtype}{conf_str}, {exec_time}ms{multi_info})"
-    )
-    return plate_clean, "SUCCESS"
+    logger.info(f"[ANPR] None of the {len(results)} Argus results contain a valid plate.")
+    return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
 
 
 def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:

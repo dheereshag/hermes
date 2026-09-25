@@ -54,7 +54,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertGreater(len(res_lucide.get_data()), 1000)
 
     def test_subsystem_page_routes(self):
-        for route in ("/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config"):
+        for route in ("/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config", "/admin"):
             res = self.client.get(route)
             self.assertEqual(res.status_code, 200)
             self.assertIn("text/html", res.content_type)
@@ -70,9 +70,17 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertIn("configured", data["cloud"])
         self.assertNotIn("device_id", data["cloud"])
         self.assertNotIn("device_key", data["cloud"])
+        self.assertNotIn("cameras", data)
+        self.assertNotIn("anpr_camera_urls", data.get("config", {}))
+        self.assertNotIn("serial_port", data.get("scale", {}))
         self.assertIn("spool", data)
         self.assertIn("events", data)
 
+    def test_get_api_config_unauthorized(self):
+        res = self.client.get("/api/config")
+        self.assertEqual(res.status_code, 401)
+        data = res.get_json()
+        self.assertFalse(data.get("success", True))
 
     def test_post_api_wifi_success(self):
         payload = {"ssid": "TestRouter_5G", "password": "SecretPassword123"}
@@ -111,7 +119,10 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertEqual(config.wifi_password, "")
 
     def test_get_api_config_excludes_credentials(self):
-        res = self.client.get("/api/config")
+        res = self.client.get(
+            "/api/config",
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+        )
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertNotIn("device_id", data)

@@ -19,6 +19,68 @@ An industrial weighing bridge integration controller bridging scale serial indic
 
 ---
 
+## 📂 Project Structure
+
+Click any file below to open it directly in the IDE:
+
+```
+hermes/
+├── [main.py](file:///Users/d/Downloads/hermes/main.py)                    # Application entry point, setup, and loop
+├── config.json                # Runtime hardware & cloud config (gitignored; auto-created on first run)
+├── [pyproject.toml](file:///Users/d/Downloads/hermes/pyproject.toml)             # Project definition, dependencies, and test config (uv-managed)
+├── [uv.lock](file:///Users/d/Downloads/hermes/uv.lock)                    # Dependency lockfile
+├── [README.md](file:///Users/d/Downloads/hermes/README.md)                  # Executive project overview and runbook
+├── [AGENTS.md](file:///Users/d/Downloads/hermes/AGENTS.md)                  # Code quality, linting, typing, and architectural rules
+├── docs/
+│   ├── [ARCHITECTURE.md](file:///Users/d/Downloads/hermes/docs/ARCHITECTURE.md)        # Hardware architecture, protocols, and sequence flows
+│   └── [CODEBASE_REFERENCE.md](file:///Users/d/Downloads/hermes/docs/CODEBASE_REFERENCE.md)  # Exhaustive function-by-function developer guide
+├── tests/
+│   ├── [test_anpr_client.py](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py)    # ANPR client, response schemas, and plate voting tests
+│   ├── [test_scale_uart.py](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py)     # Scale UART parser, framing, and silence flush tests
+│   ├── [test_session_fallback.py](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) # Weighbridge session error propagation tests
+│   ├── [test_cloud_post.py](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py)     # Gluvok API multipart and Basic Auth tests
+│   ├── [test_rgb_led.py](file:///Users/d/Downloads/hermes/tests/test_rgb_led.py)        # RGB LED state indicator driver & transitions tests
+│   ├── [test_spool_db.py](file:///Users/d/Downloads/hermes/tests/test_spool_db.py)       # SQLite WAL durable spool, atomic leasing & idempotency tests
+│   ├── [test_threading_isolation.py](file:///Users/d/Downloads/hermes/tests/test_threading_isolation.py) # Threading concurrency and non-blocking isolation tests
+│   ├── [test_web_server.py](file:///Users/d/Downloads/hermes/tests/test_web_server.py)     # Diagnostics web console & REST API tests
+│   └── [test_wifi_manager.py](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py)   # Wi-Fi watchdog & emergency hotspot fallback tests
+└── src/
+    ├── config/
+    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/config/__init__.py)         # Subpackage exports
+    │   ├── [config_manager.py](file:///Users/d/Downloads/hermes/src/config/config_manager.py)  # JSON-backed configuration manager singleton (thread-safe RLock)
+    │   └── [constants.py](file:///Users/d/Downloads/hermes/src/config/constants.py)       # System timing, timeout constants, buffer sizes & regexes
+    ├── core/
+    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/core/__init__.py)           # Subpackage exports
+    │   ├── [db.py](file:///Users/d/Downloads/hermes/src/core/db.py)                       # SQLite WAL durable outbox store with atomic lease locking
+    │   ├── [session.py](file:///Users/d/Downloads/hermes/src/core/session.py)             # Weighbridge session lifecycle & multi-camera coordinator
+    │   ├── [spool.py](file:///Users/d/Downloads/hermes/src/core/spool.py)                 # Background outbox dispatcher & retry worker with verify-before-retry
+    │   ├── [stability.py](file:///Users/d/Downloads/hermes/src/core/stability.py)         # 10s continuous weight stability state machine
+    │   └── [telemetry.py](file:///Users/d/Downloads/hermes/src/core/telemetry.py)         # Decoupled thread-safe telemetry and event log buffer
+    ├── devices/
+    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/devices/__init__.py)        # Subpackage exports
+    │   ├── [scale.py](file:///Users/d/Downloads/hermes/src/devices/scale.py)              # UART serial stream reader & line buffer parser
+    │   ├── [camera.py](file:///Users/d/Downloads/hermes/src/devices/camera.py)            # HTTP snapshot / RTSP frame grabber & parallel aux captures
+    │   ├── [wifi.py](file:///Users/d/Downloads/hermes/src/devices/wifi.py)                # Automatic Wi-Fi watchdog & emergency hotspot monitor
+    │   └── led/                                        # RGB LED GPIO driver & state machine (Green, Red, Blue)
+    ├── integrations/
+    │   ├── [__init__.py](file:///Users/d/Downloads/hermes/src/integrations/__init__.py)   # Subpackage exports
+    │   ├── [anpr.py](file:///Users/d/Downloads/hermes/src/integrations/anpr.py)           # Argus ANPR server client & plate voting algorithm
+    │   └── [gluvok.py](file:///Users/d/Downloads/hermes/src/integrations/gluvok.py)       # Gluvok Cloud API client (Basic Auth, multipart upload, verification)
+    └── web/
+        ├── [__init__.py](file:///Users/d/Downloads/hermes/src/web/__init__.py)            # Subpackage exports
+        ├── [app.py](file:///Users/d/Downloads/hermes/src/web/app.py)                     # Flask application factory (`create_app`)
+        ├── [auth.py](file:///Users/d/Downloads/hermes/src/web/auth.py)                   # Superadmin auth, token sliding, rate limiting, and decorators
+        ├── [validation.py](file:///Users/d/Downloads/hermes/src/web/validation.py)       # Configuration input sanitization and URL validation utilities
+        ├── blueprints/
+        │   ├── [api.py](file:///Users/d/Downloads/hermes/src/web/blueprints/api.py)      # REST API endpoints (`/api/status`, `/api/config`, `/api/login`, etc.)
+        │   └── [views.py](file:///Users/d/Downloads/hermes/src/web/blueprints/views.py)  # Page routes serving the dashboard UI
+        ├── [server.py](file:///Users/d/Downloads/hermes/src/web/server.py)               # Threaded WSGI server runner (:8080) & lifecycle management
+        └── templates/
+            └── [index.html](file:///Users/d/Downloads/hermes/src/web/templates/index.html) # Real-time Tailwind CSS v4 diagnostics & configuration web UI
+```
+
+---
+
 ## 🚀 Running the Application
 
 ### 1. Direct Run (Source Code / Development)

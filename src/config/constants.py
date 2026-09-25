@@ -61,3 +61,11 @@ SPOOL_WORKER_POLL_INTERVAL = 5.0 # Seconds between outbox sweeps
 SPOOL_BASE_RETRY_DELAY = 5.0     # Initial retry backoff in seconds
 SPOOL_MAX_RETRY_DELAY = 300.0    # Maximum retry backoff in seconds (5 min)
 
+# ── RGB LED Indicator Constants ───────────────────────────────────────────────
+DEFAULT_LED_PIN_RED = 17
+DEFAULT_LED_PIN_GREEN = 27
+DEFAULT_LED_PIN_BLUE = 22
+DEFAULT_LED_ACTIVE_HIGH = False   # Common Anode (Active LOW)
+LED_CLOUD_SUCCESS_DURATION = 10.0 # Duration in seconds to display Blue LED on cloud upload
+
+

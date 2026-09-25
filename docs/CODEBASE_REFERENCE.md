@@ -119,6 +119,7 @@ Defines project dependencies managed via Astral [`uv`](https://docs.astral.sh/uv
 - `pyserial`: Cross-platform RS-232/UART communications.
 - `requests`: HTTP client for Argus ANPR and Gluvok Cloud API.
 - `flask`: Application factory and REST API for local diagnostics.
+- `python-periphery`: Pure-Python Linux GPIO/cdev control for RGB LED state indicator.
 - `pytest`, `ruff`, `ty`: Development verification gates.
 
 ---
@@ -287,6 +288,20 @@ Linux NetworkManager (`nmcli`) watchdog and automatic emergency AP recovery.
   - **`start_wifi_watchdog(interval=30.0) -> None`**: Starts watchdog thread.
   - **`stop_wifi_watchdog() -> None`**: Stops watchdog thread.
 
+### `src/devices/led/`
+RGB LED hardware driver and operational state indicator on Raspberry Pi GPIO.
+
+- **Pins & Polarity**: GPIO 17 (Red), GPIO 27 (Green), GPIO 22 (Blue), Common Anode (`active_high=False`).
+- **States & Visual Indicators**:
+  - 🟢 **Green (Idle / Completed)**: Scale idle and ready for next vehicle; also turns Green after cloud success to signal completion even if the vehicle is still on the platform.
+  - 🔴 **Red (Active Session)**: First weight encountered above threshold; indicates weighment / capture is in progress.
+  - 🔵 **Blue (Cloud Transfer Success)**: Triggered for 10 seconds upon verified weighment transmission to Gluvok Cloud, then transitions to Green.
+- **Classes & Modules**:
+  - **`colors.py`**: `LEDColor` enum (`OFF`, `GREEN`, `RED`, `BLUE`).
+  - **`driver.py` (`LEDHardwareDriver`)**: Controls GPIO pins using `python-periphery` (pure-Python Linux `/dev/gpiochip*` / sysfs) with automatic mock fallback on non-Pi platforms.
+  - **`controller.py` (`RGBLedController`)**: High-level state manager coordinating Green (idle/done), Red (active session), and 10s Blue (cloud success) transitions.
+- **Global**: `led_controller = RGBLedController()` (Singleton exported via `src.devices`).
+
 ---
 
 ## 6. Integrations Subsystem (`src/integrations/`)
@@ -297,7 +312,7 @@ Argus ANPR microservice client and consensus voting algorithm.
 - **`resolve_anpr_endpoint(url: str | None = None) -> str`**:
   Sanitizes ANPR URL, normalizes `0.0.0.0` to `127.0.0.1`, and appends `/recognize` if omitted.
 - **`_extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]`**:
-  Parses Argus JSON response. Extracts license plate string from `results[].plate` or flat keys (`number_plate`, `plate`). Detects pre-screening rejections:
+  Parses Argus JSON response. Evaluates `results[]` sequentially from index 0 without sorting. Selects the first valid, non-null plate encountered. If index 0 is invalid/null, advances sequentially to index 1, 2, etc. If no valid plate exists across all items, returns `(None, "NO_PLATE_DETECTED")`. Detects pre-screening rejections:
   - `REJECTED_HUMAN_DETECTED`: Safety policy rejected frame due to person standing on platform.
   - `NO_PLATE_DETECTED`: Frame readable but no plate characters recognized.
 - **`_parse_anpr_response(response: requests.Response) -> tuple[str | None, str]`**:
@@ -341,7 +356,7 @@ Flask application factory.
 ### `src/web/blueprints/views.py`
 Frontend page routes.
 
-- **`PAGE_ROUTES`**: `("/", "/index", "/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config")`.
+- **`PAGE_ROUTES`**: `("/", "/index", "/scale", "/anpr", "/cloud", "/wifi", "/telemetry", "/errors", "/config", "/admin")`.
 - All routes render `index.html`, allowing the client-side JavaScript tab manager to navigate without full page reloads.
 
 ### `src/web/blueprints/api.py`
@@ -350,18 +365,17 @@ REST API endpoints.
 - **`POST /api/login`**:
   Verifies superadmin credentials with constant-time matching. Enforces rate limiting (max 5 failed attempts/60s) and returns HTTP `429` when limited. Returns session token on success.
 - **`GET /api/status`**:
-  Returns comprehensive system status JSON:
-  - `scale`: Active port, baudrate, `ScaleState`, and live weight in kg.
-  - `argus`: Resolved ANPR URL and live health check (`GET …/health` derived from `/recognize`).
-  - `cloud`: `center_id`, `device_id`, and `configured` (true when both device ID and key are set).
-  - `cameras`: `cam1_url` and `auxiliary_urls`.
+  Returns sanitized operational telemetry JSON:
+  - `scale`: `ScaleState` and live weight in kg.
+  - `argus`: Live health check (`online` boolean).
+  - `cloud`: `center_id` and `configured` boolean.
   - `wifi`: Upstream connection status and hotspot active boolean.
-  - `config`: Snapshot of Wi-Fi SSID, device ID, min weight, serial settings, and camera/ANPR URLs.
+  - `config`: Public display fields (`min_weight`, `center_id`, `wifi_ssid`). Sensitive camera RTSP URLs and serial port parameters are excluded from unauthenticated telemetry.
   - `latest_weighment`: Recent weighment record with timestamp and error flag.
   - `error_counts`: Live error counters from the telemetry store.
   - `events`: Circular buffer of recent system events.
-- **`GET /api/config`**:
-  Returns active threshold weight, serial settings, and camera URLs.
+- **`GET /api/config`** *(Protected: `@auth_required`)*:
+  Returns active threshold weight, serial settings, and camera URLs. Requires superadmin session token.
 - **`POST /api/config`** *(Protected: `@auth_required`)*:
   Validates payload via `validate_config_payload`. Updates `config.json`. Dynamically restarts UART serial reader if port or baudrate was modified.
 - **`POST /api/wifi`** *(Protected: `@auth_required`)*:
@@ -410,11 +424,11 @@ Contains offline-ready client-side vendor JavaScript libraries served via Flask'
 
 ### `src/web/templates/index.html`
 Single-page web application featuring:
-- **Tailwind CSS v4** styling via local `static/tailwindcss.js` (offline-ready, no CDN dependency).
-- **Lucide Icons** integration via local `static/lucide.min.js` (offline-ready, no CDN dependency).
+- **Tailwind CSS v4** styling via `@tailwindcss/browser@4` runtime.
+- **Lucide Icons** integration.
 - Navigation tabs: Overview, Scale Indicator, ANPR & Cameras, Cloud Transfer, Wi-Fi Setup, Telemetry Logs, System Config.
 - Real-time client-side polling every 1,000ms against `/api/status`.
-- Modal lock overlay with superadmin authentication protecting hardware configuration.
+- Unified modal lock overlay with superadmin authentication protecting hardware configuration and Wi-Fi management under the Admin Panel.
 
 ---
 

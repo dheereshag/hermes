@@ -214,7 +214,27 @@ class TestANPRClient(unittest.TestCase):
         mock_post.return_value = mock_response
 
         plate, status = send_frame_to_anpr_server(b"fake-bytes")
-        # First vehicle has no plate; background vehicle must not be picked
+        # Index 0 has no plate; sequentially moves to index 1 and picks DL01AB9999
+        self.assertEqual(plate, "DL01AB9999")
+        self.assertEqual(status, "SUCCESS")
+
+    @patch("src.integrations.anpr.requests.post")
+    def test_send_frame_argus_multi_vehicle_all_empty_plates(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "filename": "multi_unreadable.jpg",
+            "results": [
+                {"plate": None, "vehicle_type": "truck"},
+                {"plate": "", "vehicle_type": "car"},
+                {"plate": "N/A", "vehicle_type": "bike"},
+            ],
+            "execution_time_ms": 1200.0,
+        }
+        mock_post.return_value = mock_response
+
+        plate, status = send_frame_to_anpr_server(b"fake-bytes")
+        # None of the results have valid plates
         self.assertIsNone(plate)
         self.assertEqual(status, "NO_PLATE_DETECTED")
 
