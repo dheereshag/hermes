@@ -30,17 +30,17 @@ class TestThreadingIsolation(unittest.TestCase):
         reset_db()
 
 
-    @patch("src.core.session.capture_auxiliary_snapshots")
+    @patch("src.core.session.capture_all_camera_snapshots")
     def test_on_weight_stabilized_is_non_blocking(self, mock_capture):
         sm = WeighbridgeSessionManager()
         aux_captured_event = threading.Event()
 
-        def slow_aux_capture():
+        def slow_fleet_capture():
             time.sleep(0.2)
             aux_captured_event.set()
-            return {2: b"FAKE_CAM2_JPEG"}
+            return {"aux_1": b"FAKE_CAM2_JPEG"}
 
-        mock_capture.side_effect = slow_aux_capture
+        mock_capture.side_effect = slow_fleet_capture
 
         sm.start_session()
         self.assertEqual(sm.phase, SessionPhase.PHASE_STABILIZING)
@@ -51,17 +51,17 @@ class TestThreadingIsolation(unittest.TestCase):
         elapsed = time.time() - start_time
         # on_weight_stabilized should return instantaneously (< 0.1s) without waiting 0.2s
         self.assertLess(elapsed, 0.1)
-        self.assertIsNotNone(sm._aux_thread)
-        assert sm._aux_thread is not None
-        self.assertTrue(sm._aux_thread.name.startswith("AuxCapture_"))
+        self.assertIsNotNone(sm._fleet_snapshot_thread)
+        assert sm._fleet_snapshot_thread is not None
+        self.assertTrue(sm._fleet_snapshot_thread.name.startswith("FleetCapture_"))
 
         # Fast forward time to test finalization
         sm._post_stability_start_time = 0.0
         pkg = sm.check_session_progress()
         self.assertIsNotNone(pkg)
         assert pkg is not None
-        self.assertIn(2, pkg["auxiliary_images"])
-        self.assertEqual(pkg["auxiliary_images"][2], b"FAKE_CAM2_JPEG")
+        self.assertIn("aux_1", pkg["camera_snapshots"])
+        self.assertEqual(pkg["camera_snapshots"]["aux_1"], b"FAKE_CAM2_JPEG")
         sm.reset_session()
 
     def test_config_manager_concurrent_access(self):

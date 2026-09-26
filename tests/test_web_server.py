@@ -40,7 +40,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertNotIn("unpkg.com", html)
         self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertIn("NO_PLATE_DETECTED", html)
-        self.assertIn("REJECTED_HUMAN_DETECTED", html)
+        self.assertIn("ANPR_CONNECTION_ERROR", html)
 
     def test_index_html_ui_consistency_elements(self):
         res = self.client.get("/")

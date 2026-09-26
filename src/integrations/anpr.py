@@ -40,41 +40,6 @@ def _normalize_plate_value(plate_val: object) -> str | None:
     return plate_clean
 
 
-def _plate_from_results_list(data: dict) -> tuple[str | None, str] | None:
-    """Extract plate from Argus `results[]` list sequentially from index 0.
-
-    Processes results strictly in sequential order (index 0 has highest priority).
-    If index 0 contains a valid/non-null plate, it is returned immediately.
-    If index 0 has null/empty/invalid plate, continues sequentially (index 1, 2, ...).
-    The first valid plate encountered in array order is selected without sorting.
-    If none of the results contain a valid plate, returns (None, "NO_PLATE_DETECTED").
-    """
-    if "results" not in data:
-        return None
-
-    results = data.get("results")
-    if not isinstance(results, list) or len(results) == 0:
-        return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
-
-    exec_time = data.get("execution_time_ms", "N/A")
-    for idx, item in enumerate(results):
-        if not isinstance(item, dict):
-            continue
-        plate_clean = _normalize_plate_value(item.get("plate"))
-        if plate_clean:
-            vtype = item.get("vehicle_type") or "vehicle"
-            conf = item.get("confidence")
-            conf_str = f", conf={conf:.4f}" if isinstance(conf, (int, float)) else ""
-            logger.info(
-                f"[ANPR] Argus recognized sequential plate: '{plate_clean}' "
-                f"({vtype}{conf_str}, {exec_time}ms, priority index {idx} of {len(results)})"
-            )
-            return plate_clean, "SUCCESS"
-
-    logger.info(f"[ANPR] None of the {len(results)} Argus results contain a valid plate.")
-    return None, str(data.get("status", "NO_PLATE_DETECTED")).upper()
-
-
 def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:
     """Extract plate from flat JSON keys used by generic ANPR responses."""
     for key in ("plate", "number_plate", "plate_number", "text", "result"):
@@ -85,29 +50,33 @@ def _plate_from_flat_keys(data: dict) -> tuple[str, str] | None:
     return None
 
 
-def _extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]:
-    """Extract plate string or status code from Argus / generic JSON response."""
-    raw_status = str(data.get("status", "NO_PLATE_DETECTED")).upper()
-    if data.get("rejected"):
-        status_msg = data.get("status_message", "Pre-screening rejected frame")
-        logger.info(f"[ANPR] Argus pre-screening rejected frame: {status_msg} (status: {raw_status})")
-        return None, raw_status
+def _extract_plate_from_dict(data: dict) -> tuple[str | None, str]:
+    """
+    Extract plate string and status code from Argus RecognitionResponse or flat JSON.
 
-    if data.get("success") is False and not data.get("results"):
-        status_msg = data.get("status_message", "No plate detected")
-        logger.info(f"[ANPR] Argus reported: {status_msg} (status: {raw_status})")
-        return None, raw_status
+    Argus sorts the `results` array with the best candidate plate at index 0.
+    Therefore, we only inspect results[0].
+    If results is empty or results[0] contains no valid plate, returns (None, "NO_PLATE_DETECTED").
+    """
+    if "results" in data:
+        results = data.get("results")
+        if isinstance(results, list) and len(results) > 0:
+            first = results[0]
+            if isinstance(first, dict):
+                plate_clean = _normalize_plate_value(first.get("plate"))
+                if plate_clean:
+                    vtype = first.get("vehicle_type") or "vehicle"
+                    conf = first.get("confidence")
+                    conf_str = f", conf={conf:.4f}" if isinstance(conf, (int, float)) else ""
+                    logger.info(f"[ANPR] Argus best plate: '{plate_clean}' ({vtype}{conf_str})")
+                    return plate_clean, "SUCCESS"
+        logger.info("[ANPR] Argus returned empty or unreadable results list.")
+        return None, "NO_PLATE_DETECTED"
 
-    from_results = _plate_from_results_list(data)
-    if from_results is not None:
-        return from_results
-
+    # Fallback for generic/flat JSON endpoints: {"plate": "..."}
     from_flat = _plate_from_flat_keys(data)
     if from_flat is not None:
         return from_flat
-
-    if "status" in data:
-        return None, raw_status
 
     return None, "NO_PLATE_DETECTED"
 
@@ -119,9 +88,7 @@ def _parse_anpr_response(response: requests.Response) -> tuple[str | None, str]:
             data = response.json()
             if isinstance(data, dict):
                 logger.info(f"[Argus Response]\n{json.dumps(data, indent=2)}")
-                plate, status = _extract_plate_from_dict(data)
-                if status is not None:
-                    return plate, status
+                return _extract_plate_from_dict(data)
             elif isinstance(data, str) and data.strip():
                 logger.info(f"[Argus Response] '{data.strip()}'")
                 return data.strip().upper(), "SUCCESS"
@@ -170,13 +137,13 @@ def get_highest_frequency_plate(plate_list: Sequence[str | None]) -> str:
     """
     Analyzes a list of plate reading strings collected during a session and returns
     the string with the highest frequency.
-    Returns 'UNKNOWN_PLATE' if no valid plate was recognized.
+    Returns 'NO_PLATE_DETECTED' if no valid plate was recognized.
     """
     valid_plates = [p.strip().upper() for p in plate_list if p and isinstance(p, str) and p.strip()]
 
     if not valid_plates:
         logger.warning("[ANPR Voting] No valid plates recorded during session.")
-        return "UNKNOWN_PLATE"
+        return "NO_PLATE_DETECTED"
 
     counter = Counter(valid_plates)
     most_common_plate, count = counter.most_common(1)[0]

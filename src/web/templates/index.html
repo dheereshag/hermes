@@ -302,11 +302,11 @@
               <span id="ov-argus-badge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">ONLINE</span>
             </div>
             <div>
-              <div class="text-lg font-bold text-foreground">YOLO v11 + Docling</div>
+              <div class="text-lg font-bold text-foreground">YOLO + RapidOCR</div>
               <p class="text-xs font-mono text-muted-foreground mt-1">Port 8000 (FastAPI)</p>
             </div>
             <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
-              <span>Consensus Voting</span>
+              <span>Top Plate OCR</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
           </div>
@@ -322,7 +322,7 @@
               <p class="text-xs text-muted-foreground mt-1">Gluvok Cloud API</p>
             </div>
             <div class="text-xs text-muted-foreground flex items-center justify-between border-t border-border pt-2">
-              <span>Bearer JWT Auth</span>
+              <span>HTTP Basic Auth</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </div>
           </div>
@@ -416,7 +416,7 @@
               </div>
               <div>
                 <h2 class="text-base font-semibold text-foreground">ANPR & Optical Cameras</h2>
-                <p class="text-xs text-muted-foreground">Continuous 2s Camera 1 capturing + Parallel auxiliary overview snapshots</p>
+                <p class="text-xs text-muted-foreground">Continuous 2s ANPR multi-camera capturing + Parallel overview snapshots</p>
               </div>
             </div>
             <span id="anpr-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-muted text-muted-foreground border border-border">CHECKING...</span>
@@ -440,7 +440,7 @@
               </div>
               <div>
                 <h2 class="text-base font-semibold text-foreground">Gluvok Cloud Transfer</h2>
-                <p class="text-xs text-muted-foreground">Direct Base64 weighment submission to https://gluvok.vercel.app</p>
+                <p class="text-xs text-muted-foreground">Multipart/form-data weighment transmission to https://gluvok.vercel.app</p>
               </div>
             </div>
             <span id="cloud-live-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CONFIGURED</span>
@@ -644,7 +644,7 @@
               </div>
             </div>
 
-            <!-- Auxiliary Overview Cameras (Cameras 2...N) -->
+            <!-- Auxiliary Overview Cameras -->
             <div class="space-y-3 pt-3 border-t border-border/50">
               <div class="flex items-center justify-between">
                 <div>
@@ -721,10 +721,10 @@
     let authToken = sessionStorage.getItem("hermes_token") || "";
 
     const ANPR_ERROR_CODES_DB = [
-      { code: "NO_PLATE_DETECTED", category: "ANPR Engine", cause: "Vehicle on scale, but plate is obscured or dirty.", fix: "Inspect Camera 1 alignment or clean license plate." },
-      { code: "REJECTED_HUMAN_DETECTED", category: "Safety Guard", cause: "YOLO pre-screening detected human near vehicle.", fix: "Ensure operators step clear of the weighbridge platform." },
-      { code: "REJECTED_NO_FOUR_WHEELER", category: "Pre-screening", cause: "Weight active, but no 4-wheeler detected in frame.", fix: "Ensure vehicle is centered within Camera 1 field of view." },
-      { code: "ANPR_TIMEOUT", category: "Inference", cause: "Argus microservice took longer than 15s to compute.", fix: "Check Raspberry Pi CPU utilization." }
+      { code: "NO_PLATE_DETECTED", category: "ANPR Engine", cause: "Vehicle on scale, but no valid license plate detected in ANPR frame(s).", fix: "Inspect ANPR camera alignment, focus, or clean license plate." },
+      { code: "ANPR_TIMEOUT", category: "Inference", cause: "Argus microservice took longer than timeout threshold to compute.", fix: "Check Argus service status and CPU utilization." },
+      { code: "ANPR_CONNECTION_ERROR", category: "Network", cause: "Cannot reach Argus inference microservice on configured endpoint.", fix: "Verify Argus service is running on port 8000." },
+      { code: "EMPTY_IMAGE", category: "Capture", cause: "Camera stream returned empty or unreadable frame data.", fix: "Verify RTSP / HTTP camera stream accessibility." }
     ];
 
     function getAuthHeaders() {

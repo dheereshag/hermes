@@ -67,10 +67,10 @@ Welcome to the **Hermes Weighbridge & ANPR Integration Controller** maintainer m
 ```
 
 1. **Weight Indicator (Hardware Serial)**: Transmits continuous ASCII weight readings via an RS-232 serial cable connected to `/dev/ttyAMA0` (GPIO UART) or `/dev/ttyUSB0` at **1200 Baud 8N1**.
-2. **Camera 1 (ANPR Angle)**: High-resolution IP camera aimed squarely at the vehicle license plate mounting area.
-3. **Cameras 2..N (Overview Angles)**: Auxiliary cameras capturing top-down, side, and rear views of the truck on the platform for visual load verification.
-4. **Argus Microservice**: A local or network FastAPI server (`:8000/recognize`) running OCR (YOLO + Docling) on submitted JPEG frames.
-5. **Gluvok Cloud API**: Central enterprise weighment database endpoint (`https://gluvok.vercel.app`) receiving signed JSON payloads with base64 images.
+2. **ANPR License Plate Cameras**: High-resolution IP cameras aimed at vehicle license plates (Front, Rear, etc.).
+3. **Auxiliary Overview Cameras**: Auxiliary cameras capturing top-down, side, and overview views of the truck on the platform for visual load verification.
+4. **Argus Microservice**: A local or network FastAPI server (`:8000/recognize`) running plate detection and OCR (YOLO + RapidOCR) on submitted JPEG frames.
+5. **Gluvok Cloud API**: Central enterprise weighment database endpoint (`https://gluvok.vercel.app/api/v1/weighment`) receiving multipart/form-data payloads with HTTP Basic Auth.
 
 ---
 
@@ -307,10 +307,8 @@ Argus ANPR microservice client and consensus voting algorithm.
 
 - **`resolve_anpr_endpoint(url: str | None = None) -> str`**:
   Sanitizes ANPR URL, normalizes `0.0.0.0` to `127.0.0.1`, and appends `/recognize` if omitted.
-- **`_extract_plate_from_dict(data: dict) -> tuple[str | None, str | None]`**:
-  Parses Argus JSON response. Evaluates `results[]` sequentially from index 0 without sorting. Selects the first valid, non-null plate encountered. If index 0 is invalid/null, advances sequentially to index 1, 2, etc. If no valid plate exists across all items, returns `(None, "NO_PLATE_DETECTED")`. Detects pre-screening rejections:
-  - `REJECTED_HUMAN_DETECTED`: Safety policy rejected frame due to person standing on platform.
-  - `NO_PLATE_DETECTED`: Frame readable but no plate characters recognized.
+- **`_extract_plate_from_dict(data: dict) -> tuple[str | None, str]`**:
+  Parses Argus `RecognitionResponse` or flat JSON. Inspects `results[0]` directly (which is pre-sorted by Argus with the highest-ranked plate). If `results` is empty or `results[0]` lacks a valid plate, returns `(None, "NO_PLATE_DETECTED")`.
 - **`_parse_anpr_response(response: requests.Response) -> tuple[str | None, str]`**:
   Extracts plate text and status code from HTTP 200/201 responses.
 - **`send_frame_to_anpr_server(image_bytes: bytes | None, server_url: str | None = None, timeout: float = ANPR_SERVER_TIMEOUT) -> tuple[str | None, str]`**:
@@ -319,16 +317,15 @@ Argus ANPR microservice client and consensus voting algorithm.
   Consensus voting: computes frequency histogram across all samples collected during the session. Returns the most frequent plate candidate, filtering out intermittent OCR noise.
 
 ### `src/integrations/gluvok.py`
-Gluvok Cloud API client, device headers authentication, Indian plate regex validation, weighment payload builder, and direct Base64 uploader.
+Gluvok Cloud API client, HTTP Basic Authentication, multipart weighment transmission matching the official curl specification, and anti-duplicate verification.
 
 - **`GLUVOK_BASE_URL = "https://gluvok.vercel.app"`**: Base URL for cloud persistence.
-- **`get_device_headers() -> dict[str, str]`**: Generates custom HTTP headers (`x-device-id`, `x-device-key`) for stateless edge device authentication.
-- **`sanitize_vehicle_number(raw_plate: str) -> tuple[str, str]`**:
-  Returns `(detected_vehicle_number, vehicle_number)`. The second value is a sanitized Indian-format candidate (or placeholder `MH00XX0000`).
-- **`_build_entry_payload(session_payload: dict[str, Any]) -> dict[str, Any]`**:
-  Converts raw camera JPEG byte arrays into RFC 2397 Data URIs (`data:image/jpeg;base64,...`) and structures the JSON payload.
+- **`transmit_entry_multipart(center_id: int, detected_vehicle_number: str, weight: float, image_bytes: bytes | None = None, filename: str = "truck_001.jpg", images: list[tuple[str, bytes]] | None = None) -> tuple[bool, str | None, str | None, bool]`**:
+  Submits weighment session and multi-camera snapshots to `/api/entries` via multipart/form-data with HTTP Basic Auth. Handles storage retry fallbacks, conflict (409) deduplication, and read timeouts.
+- **`verify_entry_in_cloud(center_id: int, detected_vehicle_number: str, weight: float) -> str | None`**:
+  Verifies if an entry with matching plate and weight exists in the cloud after ambiguous timeouts to prevent duplicate submissions.
 - **`post_to_cloud(session_payload: dict[str, Any]) -> None`**:
-  Transmits weighment payload to `POST /api/entries` with custom device headers. Treats HTTP `200` and `201` as success; also handles `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and other non-success statuses. Clears raw image memory in caller `session_payload` upon completion.
+  Bridge function: transmits entry from session dictionary and updates telemetry. Iterates through `camera_snapshots` attaching canonical camera images.
 
 ---
 
@@ -439,9 +436,9 @@ Hermes contains a comprehensive suite of unit and integration tests executing un
 | Test File | Test Class / Scope | What It Verifies |
 | :--- | :--- | :--- |
 | [`tests/test_scale_uart.py`](file:///Users/d/Downloads/hermes/tests/test_scale_uart.py) | `TestScaleUARTReader` | Packet parsing (`26500MN\r\n`), split/chunked serial frames, 300ms inter-character silence timeout flush, STX/ETX framing (`\x02...\x03`), and signed float decimals (`+05000.5kg`, `-12.5`). |
-| [`tests/test_anpr_client.py`](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py) | `TestANPRClient` | Empty byte handling, Argus recognition schema parsing (`results[].plate`), pre-screening rejection parsing (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`), flat JSON parsing, network timeout & connection error codes, and highest-frequency consensus plate voting algorithm. |
-| [`tests/test_session_fallback.py`](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) | `TestSessionErrorFallback` | Weighbridge session error propagation (confirming rejected Argus status is forwarded as plate value while still packaging the truck overview image), and consensus preference for valid plates over transient errors. |
-| [`tests/test_cloud_post.py`](file:///Users/d/Downloads/hermes/tests/test_cloud_post.py) | `TestCloudPost` | Stateless device authentication headers (`x-device-id`, `x-device-key`), payload construction, Base64 URI generation, HTTP 200/201 success flow, and error handling (401, 403, 400, 500, network exceptions). |
+| [`tests/test_anpr_client.py`](file:///Users/d/Downloads/hermes/tests/test_anpr_client.py) | `TestANPRClient` | Empty byte handling, Argus recognition schema parsing (`results[0].plate`), empty results fallback (`NO_PLATE_DETECTED`), flat JSON parsing, network timeout & connection error codes, and highest-frequency consensus plate voting algorithm. |
+| [`tests/test_session_fallback.py`](file:///Users/d/Downloads/hermes/tests/test_session_fallback.py) | `TestSessionErrorFallback` | Weighbridge session error propagation (confirming `NO_PLATE_DETECTED` is assigned on recognition failure while still packaging the truck overview image), and consensus preference for valid plates over transient errors. |
+| [`tests/test_cloud_post.py`](file:///Users/d/Documents/repos/hermes/tests/test_cloud_post.py) | `TestCloudPost` | HTTP Basic authentication (`device_id:device_key`), multipart/form-data payload construction, multi-image attachments, HTTP 200/201 success flow, and error handling (401, 403, 400, 500, network exceptions). |
 | [`tests/test_threading_isolation.py`](file:///Users/d/Downloads/hermes/tests/test_threading_isolation.py) | `TestThreadingIsolation` | Concurrency safety: non-blocking auxiliary camera captures on weight stability, non-blocking cloud upload dispatches, and thread-safe concurrent access across `ConfigManager`. |
 | [`tests/test_web_server.py`](file:///Users/d/Downloads/hermes/tests/test_web_server.py) | `TestFlaskDiagnosticsApp` | Flask web application routes (`/`, `/scale`, `/anpr`, `/cloud`, etc.), `/api/status` schema, Wi-Fi provisioning (`/api/wifi`, `/api/wifi/clear`), configuration updates (`POST /api/config`), input validation, 401 Unauthorized handling, 404 responses, and `FallbackWebServer` thread lifecycle (`start`/`stop`). |
 | [`tests/test_wifi_manager.py`](file:///Users/d/Downloads/hermes/tests/test_wifi_manager.py) | `TestWiFiManager` | NetworkManager `nmcli` parsing, active connection detection, exclusion of emergency hotspot from external Wi-Fi status, AP start and stop commands, connection failure recovery, and watchdog background thread control. |

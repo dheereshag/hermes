@@ -24,23 +24,19 @@ class TestANPRClient(unittest.TestCase):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "success": True,
-            "rejected": False,
-            "status": "success",
-            "status_message": "License plate successfully detected and recognized on car via docling.",
-            "vehicle_detected": True,
-            "vehicle_type": "car",
-            "human_detected": False,
             "filename": "frame.jpg",
-            "provider": "docling",
+            "humans_outside": 0,
+            "humans_inside": 0,
             "results": [
                 {
                     "plate": "RJ09GA0165",
+                    "vehicle_type": "car",
                     "state": "Rajasthan",
-                    "raw_text": "RJ09GA0165"
+                    "raw_text": "RJ09GA0165",
+                    "confidence": 0.98,
                 }
             ],
-            "execution_time_ms": 115.4
+            "execution_time_ms": 115.4,
         }
         mock_post.return_value = mock_response
 
@@ -55,44 +51,15 @@ class TestANPRClient(unittest.TestCase):
         self.assertIn("file", kwargs["files"])
 
     @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_rejected_human(self, mock_post):
+    def test_send_frame_argus_empty_results(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "success": False,
-            "rejected": True,
-            "status": "rejected_human_detected",
-            "status_message": "Pre-screening policy rejected: Human presence detected.",
-            "vehicle_detected": True,
-            "vehicle_type": "car",
-            "human_detected": True,
             "filename": "frame.jpg",
-            "provider": "docling",
+            "humans_outside": 0,
+            "humans_inside": 0,
             "results": [],
-            "execution_time_ms": 42.1
-        }
-        mock_post.return_value = mock_response
-
-        plate, status = send_frame_to_anpr_server(b"fake-bytes")
-        self.assertIsNone(plate)
-        self.assertEqual(status, "REJECTED_HUMAN_DETECTED")
-
-    @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_no_plate(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "success": False,
-            "rejected": False,
-            "status": "no_plate_detected",
-            "status_message": "No readable license plate characters recognized.",
-            "vehicle_detected": True,
-            "vehicle_type": "truck",
-            "human_detected": False,
-            "filename": "frame.jpg",
-            "provider": "docling",
-            "results": [],
-            "execution_time_ms": 85.0
+            "execution_time_ms": 42.1,
         }
         mock_post.return_value = mock_response
 
@@ -106,7 +73,7 @@ class TestANPRClient(unittest.TestCase):
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "plate": "MH12AB1234",
-            "confidence": 0.95
+            "confidence": 0.95,
         }
         mock_post.return_value = mock_response
 
@@ -163,7 +130,7 @@ class TestANPRClient(unittest.TestCase):
         self.assertEqual(status, "SUCCESS")
 
     @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_multi_vehicle_different_plates(self, mock_post):
+    def test_send_frame_argus_multi_vehicle_different_plates_takes_first(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -187,12 +154,12 @@ class TestANPRClient(unittest.TestCase):
         mock_post.return_value = mock_response
 
         plate, status = send_frame_to_anpr_server(b"fake-bytes")
-        # Primary vehicle (first in results array) must be selected
+        # results array is already sorted by Argus; results[0] is authoritative
         self.assertEqual(plate, "RJ43GA2012")
         self.assertEqual(status, "SUCCESS")
 
     @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_multi_vehicle_first_empty_plate(self, mock_post):
+    def test_send_frame_argus_first_plate_none_yields_no_plate(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -214,12 +181,12 @@ class TestANPRClient(unittest.TestCase):
         mock_post.return_value = mock_response
 
         plate, status = send_frame_to_anpr_server(b"fake-bytes")
-        # Index 0 has no plate; sequentially moves to index 1 and picks DL01AB9999
-        self.assertEqual(plate, "DL01AB9999")
-        self.assertEqual(status, "SUCCESS")
+        # Since results[0] is best candidate and has no plate, return NO_PLATE_DETECTED
+        self.assertIsNone(plate)
+        self.assertEqual(status, "NO_PLATE_DETECTED")
 
     @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_multi_vehicle_all_empty_plates(self, mock_post):
+    def test_send_frame_argus_all_empty_plates(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -234,24 +201,6 @@ class TestANPRClient(unittest.TestCase):
         mock_post.return_value = mock_response
 
         plate, status = send_frame_to_anpr_server(b"fake-bytes")
-        # None of the results have valid plates
-        self.assertIsNone(plate)
-        self.assertEqual(status, "NO_PLATE_DETECTED")
-
-    @patch("src.integrations.anpr.requests.post")
-    def test_send_frame_argus_empty_results_no_status_key(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "filename": "empty.jpg",
-            "humans_outside": 0,
-            "humans_inside": 0,
-            "results": [],
-            "execution_time_ms": 1100.0,
-        }
-        mock_post.return_value = mock_response
-
-        plate, status = send_frame_to_anpr_server(b"fake-bytes")
         self.assertIsNone(plate)
         self.assertEqual(status, "NO_PLATE_DETECTED")
 
@@ -262,10 +211,10 @@ class TestANPRClient(unittest.TestCase):
 
     def test_highest_frequency_empty_list(self):
         winner = get_highest_frequency_plate([])
-        self.assertEqual(winner, "UNKNOWN_PLATE")
+        self.assertEqual(winner, "NO_PLATE_DETECTED")
 
         winner_none = get_highest_frequency_plate([None, "", "   "])
-        self.assertEqual(winner_none, "UNKNOWN_PLATE")
+        self.assertEqual(winner_none, "NO_PLATE_DETECTED")
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@
 graph TD
     subgraph Hardware Layer
         Scale[Indicator Serial Stream /dev/ttyAMA0 @ 1200 Baud]
-        Cam1[Camera 1: License Plate Snapshot]
-        CamAux[Cameras 2..N: Overview Snapshots]
+        CamANPR[ANPR Cameras 1..N: License Plate Snapshots]
+        CamAux[Auxiliary Cameras 1..M: Overview Snapshots]
     end
 
     subgraph Hermes Controller
@@ -31,12 +31,12 @@ graph TD
     Scale -->|Serial Bytes| UART
     UART -->|Weight Float| Stability
     Stability -->|Weight Threshold Crossed| SessionMgr
-    SessionMgr -->|2s Capture Loop| Cam1
-    Cam1 -->|JPEG Buffer| ANPRClient
+    SessionMgr -->|Continuous Capture Loop| CamANPR
+    CamANPR -->|JPEG Buffer| ANPRClient
     ANPRClient -->|POST /recognize| ArgusMicroservice
     ArgusMicroservice -->|Candidate Plate / Error| ANPRClient
     Stability -->|10s Stability Confirmed| SessionMgr
-    SessionMgr -->|Parallel Trigger| CamAux
+    SessionMgr -->|Parallel Fleet Trigger| CamAux
     SessionMgr -->|Session Package| GluvokAPI
     WebDiag <-->|Telemetry & Reconfig| SessionMgr
     WiFiWatchdog <-->|NetworkManager nmcli| WebDiag
@@ -50,8 +50,8 @@ graph TD
 - **Edge Anti-Duplication & Idempotency**: Sequential single-flight FIFO dispatcher with atomic task leases (`lease_until`) and a **verify-before-retry** protocol for ambiguous read timeouts, preventing duplicate cloud entries when retrying offline weighments.
 - **Weight Scale Serial Parsing**: Reads continuous raw serial stream from UART (`/dev/ttyAMA0` or USB-to-Serial at 1200 Baud 8N1).
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
-- **ANPR Multi-Sample Voting**: Captures Camera 1 frames every 2 seconds during active weighing and selects the highest-frequency plate candidate.
-- **Concurrent Auxiliary Camera Snapshots**: Captures overview snapshots from auxiliary cameras in parallel upon weight stabilization.
+- **Multi-Camera ANPR OCR & Consensus Voting**: Concurrently captures frames from all configured ANPR cameras (Front, Rear, etc.) every 2 seconds during active weighing and elects the highest-frequency plate candidate.
+- **Synchronized Full-Fleet Camera Snapshots**: Captures high-resolution snapshots across all cameras (every ANPR camera + every auxiliary camera) in parallel upon weight stabilization.
 - **Non-Blocking Real-Time Threading**: Scale serial reading is completely decoupled from disk spooling and network I/O; cloud uploads and camera captures are dispatched in dedicated background threads.
 - **Gluvok Cloud API Multipart Integration**: Matches curl specification (`curl -X POST ... -u "pi1:hardware123" -F "center_id=..." -F "detected_vehicle_number=..." -F "weight=..." -F "file=@..."`).
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` displaying live scale weight, ANPR status, cloud spool queue counts, error monitoring, and configuration.
@@ -141,8 +141,9 @@ hermes/
 ### 5.1 Core Business Logic (`src/core/`)
 - **`WeighbridgeSessionManager` (`session.py`)**:
   - Coordinates the session lifecycle (`PHASE_IDLE` -> `PHASE_STABILIZING` -> `PHASE_POST_STABILITY` -> `PHASE_COMPLETED`).
-  - Runs a 2-second capture loop on Camera 1 during the stabilization phase.
-  - Assembles the final session package containing stable weight, highest-voted plate, and base64 images.
+  - Runs a 2-second concurrent capture loop across all configured ANPR cameras during the stabilization phase.
+  - Triggers asynchronous full-fleet camera snapshot capture (`capture_all_camera_snapshots`) upon weight stabilization.
+  - Assembles the final session package containing stable weight, highest-voted consensus plate, and all camera images in `camera_snapshots`.
 - **`ScaleStabilityMachine` (`stability.py`)**:
   - Requires weight to exceed `min_weight` (default `50.0 kg`) to trigger a weighing session.
   - Implements a continuous 10-second stability check (`STABILITY_TOLERANCE = ±2.0 kg`, `STABILITY_DURATION = 10.0s`).
@@ -159,7 +160,8 @@ hermes/
   - Uses regex extraction (`rb"([0-9]{3,6})MN"` and flexible signed float patterns) to parse numeric weights.
 - **`Camera Manager` (`camera.py`)**:
   - Low-memory HTTP snapshot grabber with optional OpenCV RTSP single-frame fallback.
-  - Concurrently captures overview angles (Cameras 2..N) upon stabilization using a bounded `ThreadPoolExecutor`.
+  - Concurrently captures snapshots from all configured cameras (ANPR + Auxiliary) using a bounded `ThreadPoolExecutor` via `capture_all_camera_snapshots()`.
+  - Runs parallel multi-ANPR camera frame grabbing via `capture_anpr_snapshots()`.
 - **`WiFi Manager` (`wifi.py`)**:
   - Continuously monitors active Wi-Fi connection via `nmcli`.
   - Automatically spins up an emergency Wi-Fi Access Point (`hermes` / `12345678`) on the wireless interface if connection to the facility router is lost, allowing on-site technicians to connect directly.
@@ -167,13 +169,13 @@ hermes/
 ### 5.3 External Integrations (`src/integrations/`)
 - **`Argus ANPR Client` (`anpr.py`)**:
   - Sends raw JPEG bytes to the Argus FastAPI microservice endpoint (`/recognize`).
-  - Supports both full Argus `RecognitionResponse` schemas and flat JSON schemas with pre-screening error detection (`REJECTED_HUMAN_DETECTED`, `NO_PLATE_DETECTED`).
+  - Supports full Argus `RecognitionResponse` schemas (evaluating `results[0]` directly as the pre-sorted best plate) and flat JSON schemas, producing `NO_PLATE_DETECTED` whenever recognition fails.
   - Employs a frequency counter (`get_highest_frequency_plate`) to pick the consensus plate candidate across multi-sample captures.
 - **`Gluvok Cloud API Client` (`gluvok.py`)**:
-  - Exposes `GLUVOK_BASE_URL` and `get_device_headers()` for stateless edge device authentication (`x-device-id`, `x-device-key`).
-  - Validates and sanitizes license plate numbers against Indian registration number patterns (`INDIAN_PLATE_REGEX`).
-  - Structures weighment session data and RFC 2397 base64-encoded snapshot images directly for `POST /api/entries`.
-  - Handles response status codes: `200`/`201` success, `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and server/network errors.
+  - Handles HTTP Basic Authentication (`-u device_id:device_key`) for weighment transmission matching the official Gluvok curl specification.
+  - Submits canonical multi-camera snapshots (`camera_snapshots`: `anpr_1`, `anpr_2`, `aux_1`, etc.) as multipart/form-data files.
+  - Automatically verifies entries against the cloud API before retrying upon ambiguous timeouts to prevent duplicate submissions.
+  - Handles response status codes: `200`/`201` success, `409` idempotent duplicate acknowledgement, `401 Unauthorized`, `403 Forbidden`, `400 Bad Request`, and server/network errors.
 
 ### 5.4 Diagnostics Web Dashboard (`src/web/`)
 - **Application Factory (`app.py`)**:
@@ -215,15 +217,15 @@ sequenceDiagram
     participant Cloud as Gluvok API
 
     Scale->>Herm: Weight > 50kg (Threshold crossed)
-    Herm->>Herm: Start Weighbridge Session & 2s ANPR Loop
+    Herm->>Herm: Start Weighbridge Session & 2s Multi-ANPR Loop
     loop Every 2 Seconds
-        Herm->>Argus: POST /recognize (Cam 1 Snapshot)
-        Argus-->>Herm: Plate Candidate / Status
+        Herm->>Argus: POST /recognize (All ANPR Cameras Snapshots)
+        Argus-->>Herm: Plate Candidate / Status (Front, Rear, etc.)
     end
     Scale->>Herm: Weight Stable for 10.0s (±2kg)
-    Herm->>Herm: Trigger Aux Cameras 2..N Snapshot
+    Herm->>Herm: Trigger Full Fleet Snapshots (All ANPR + All Aux Cams)
     Herm->>Herm: Wait +10s Post-Stability Buffer
-    Herm->>Herm: Finalize Vote & Build Payload
+    Herm->>Herm: Finalize Vote & Build Payload (camera_snapshots)
     Herm->>Cloud: POST /api/entries (Weight, Plate, Images)
     Cloud-->>Herm: HTTP 200/201 (Entry ID)
     Scale->>Herm: Weight returns to 0kg
@@ -270,7 +272,7 @@ WEIGHMENT FINALIZED
         ▼
 SQLite WAL Database (data/hermes.db)
 - weighment_spool: status='PENDING', lease_until=0, session_id (UNIQUE)
-- spool_images: raw binary BLOBs (cam1 + auxiliary)
+- spool_images: raw binary BLOBs (all camera_snapshots: anpr_1..N, aux_1..M)
         │
         ▼
 Single SpoolWorker (FIFO Sequential Processing)

@@ -155,7 +155,54 @@ def capture_anpr_snapshots(
     return [(idx + 1, url, results_dict.get(idx + 1)) for idx, url in enumerate(urls)]
 
 
+def capture_all_camera_snapshots(
+    anpr_urls: list[str] | None = None,
+    aux_urls: list[str] | None = None,
+) -> dict[str, bytes | None]:
+    """
+    Concurrently captures snapshots from all cameras (all ANPR + all Auxiliary).
+    Returns a dict mapping canonical labels ('anpr_1', 'anpr_2', 'aux_1', 'aux_2', etc.)
+    to raw JPEG bytes or None.
+    """
+    a_urls = anpr_urls if anpr_urls is not None else config.anpr_camera_urls
+    x_urls = aux_urls if aux_urls is not None else config.auxiliary_camera_urls
+
+    labeled_tasks: list[tuple[str, str]] = []
+    for idx, url in enumerate(a_urls):
+        labeled_tasks.append((f"anpr_{idx + 1}", url))
+    for idx, url in enumerate(x_urls):
+        labeled_tasks.append((f"aux_{idx + 1}", url))
+
+    if not labeled_tasks:
+        return {}
+
+    workers = min(len(labeled_tasks), MAX_PARALLEL_CAMERA_WORKERS)
+    results: dict[str, bytes | None] = {}
+    start_time = time.time()
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_label = {
+            executor.submit(fetch_image_bytes, url): label
+            for label, url in labeled_tasks
+        }
+        for future in as_completed(future_to_label):
+            label = future_to_label[future]
+            try:
+                img_bytes = future.result()
+                results[label] = img_bytes
+                status = "SUCCESS" if img_bytes else "FAILED"
+                logger.info(f"[Camera] Full fleet {label} capture: {status}")
+            except (requests.RequestException, OSError, ValueError, RuntimeError) as exc:
+                logger.error(f"[Camera] {label} snapshot generated exception: {exc}")
+                results[label] = None
+
+    elapsed = time.time() - start_time
+    logger.info(f"[Camera] Full fleet capture ({len(labeled_tasks)} cameras) completed in {elapsed:.2f}s")
+    return results
+
+
 __all__ = [
+    "capture_all_camera_snapshots",
     "capture_anpr_snapshots",
     "capture_auxiliary_snapshots",
     "fetch_image_bytes",

@@ -43,28 +43,56 @@ class TestSpoolDB(unittest.TestCase):
             "session_id": "SESS_TEST_001",
             "weight": 18540.5,
             "anpr_plate": "MH12AB1234",
-            "cam1_final_image": b"fake_cam1_data",
-            "auxiliary_images": {1: b"fake_aux1_data", 2: b"fake_aux2_data"},
+            "camera_snapshots": {
+                "anpr_1": b"fake_anpr1_data",
+                "aux_1": b"fake_aux1_data",
+                "aux_2": b"fake_aux2_data",
+            },
         }
         session_id = spool_weighment(pkg)
         self.assertEqual(session_id, "SESS_TEST_001")
 
         images = get_spool_images(session_id)
         self.assertEqual(len(images), 3)
-        self.assertEqual(images[0][0], "cam1")
-        self.assertEqual(images[0][2], b"fake_cam1_data")
+        self.assertEqual(images[0][0], "anpr_1")
+        self.assertEqual(images[0][2], b"fake_anpr1_data")
 
         stats = get_spool_stats()
         self.assertEqual(stats["pending"], 1)
         self.assertEqual(stats["uploading"], 0)
         self.assertEqual(stats["acknowledged"], 0)
 
+    def test_spool_weighment_with_full_camera_snapshots(self):
+        pkg = {
+            "session_id": "SESS_FLEET_001",
+            "weight": 34200.0,
+            "anpr_plate": "HR26DK8333",
+            "camera_snapshots": {
+                "anpr_1": b"front_img",
+                "anpr_2": b"rear_img",
+                "aux_1": b"cabin_img",
+                "aux_2": b"bed_img",
+            },
+        }
+        session_id = spool_weighment(pkg)
+        self.assertEqual(session_id, "SESS_FLEET_001")
+
+        images = get_spool_images(session_id)
+        self.assertEqual(len(images), 4)
+        cams = [img[0] for img in images]
+        self.assertEqual(cams, ["anpr_1", "anpr_2", "aux_1", "aux_2"])
+        data_map = {img[0]: img[2] for img in images}
+        self.assertEqual(data_map["anpr_1"], b"front_img")
+        self.assertEqual(data_map["anpr_2"], b"rear_img")
+        self.assertEqual(data_map["aux_1"], b"cabin_img")
+        self.assertEqual(data_map["aux_2"], b"bed_img")
+
     def test_duplicate_spool_prevented(self):
         pkg = {
             "session_id": "SESS_DUPLICATE_001",
             "weight": 25000.0,
             "anpr_plate": "DL1CAB1234",
-            "cam1_final_image": b"data",
+            "camera_snapshots": {"anpr_1": b"data"},
         }
         spool_weighment(pkg)
         # Second insert with identical session_id should be ignored
@@ -78,7 +106,7 @@ class TestSpoolDB(unittest.TestCase):
             "session_id": "SESS_LEASE_001",
             "weight": 12000.0,
             "anpr_plate": "KA01AB1111",
-            "cam1_final_image": b"img",
+            "camera_snapshots": {"anpr_1": b"img"},
         }
         spool_weighment(pkg)
 
@@ -213,8 +241,8 @@ class TestSpoolDB(unittest.TestCase):
         self.assertIsNotNone(files)
         self.assertEqual(files[0][0], "file")
         self.assertEqual(files[0][1][1], b"")
-        # Check that plate is sanitized to Indian plate format
-        self.assertEqual(call_kwargs["data"]["detected_vehicle_number"], "MH00XX0000")
+        # Check that plate is preserved without arbitrary overriding
+        self.assertEqual(call_kwargs["data"]["detected_vehicle_number"], "NO_PLATE_DETECTED")
 
     @patch("src.integrations.gluvok.requests.get")
     def test_verify_entry_in_cloud_matches_tolerance(self, mock_get: Mock):
@@ -240,7 +268,7 @@ class TestSpoolDB(unittest.TestCase):
         mock_post.return_value = mock_resp
 
         multi_images = [
-            ("truck_cam1.jpg", b"cam1_bytes"),
+            ("truck_anpr_1.jpg", b"anpr1_bytes"),
             ("truck_aux_2.jpg", b"aux2_bytes"),
             ("truck_aux_3.jpg", b"aux3_bytes"),
             ("truck_anpr_2.jpg", b"anpr2_bytes"),
@@ -273,8 +301,11 @@ class TestSpoolDB(unittest.TestCase):
             "session_id": "SESS_E2E_001",
             "weight": 32000.0,
             "anpr_plate": "MH14XY9999",
-            "cam1_final_image": b"truck_photo",
-            "auxiliary_images": {2: b"aux2_photo", "anpr_2": b"anpr2_photo"},
+            "camera_snapshots": {
+                "anpr_1": b"truck_photo",
+                "aux_2": b"aux2_photo",
+                "anpr_2": b"anpr2_photo",
+            },
         }
         spool_weighment(pkg)
 
@@ -289,7 +320,7 @@ class TestSpoolDB(unittest.TestCase):
             called_images = mock_tx.call_args.kwargs.get("images")
             self.assertIsNotNone(called_images)
             assert isinstance(called_images, list)
-            self.assertEqual(len(called_images), 3)  # cam1 + aux_2 + anpr_2
+            self.assertEqual(len(called_images), 3)  # anpr_1 + aux_2 + anpr_2
 
         stats = get_spool_stats()
         self.assertEqual(stats["acknowledged"], 1)

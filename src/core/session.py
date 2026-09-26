@@ -22,8 +22,8 @@ from src.config.constants import (
 )
 from src.core.telemetry import record_system_event, record_weighment_result
 from src.devices.camera import (
+    capture_all_camera_snapshots,
     capture_anpr_snapshots,
-    capture_auxiliary_snapshots,
     fetch_image_bytes,
 )
 from src.integrations.anpr import (
@@ -43,8 +43,8 @@ __all__ = [
 
 class SessionPhase(Enum):
     PHASE_IDLE = 0
-    PHASE_STABILIZING = 1          # Weight active, 2s Cam 1 ANPR running
-    PHASE_POST_STABILITY = 2       # Weight stable, Aux cams captured, +10s timer running
+    PHASE_STABILIZING = 1          # Weight active, 2s Multi-ANPR OCR running
+    PHASE_POST_STABILITY = 2       # Weight stable, Full fleet cameras captured, +10s timer running
     PHASE_COMPLETED = 3            # Session finished & transmitted, awaiting weight return to 0
 
 
@@ -54,14 +54,13 @@ class WeighbridgeSessionManager:
         self.session_id: str | None = None
         self.stable_weight: float = 0.0
 
-        self._cam1_frames: list[bytes] = []
-        self._cam1_plates: list[str] = []
-        self._cam1_statuses: list[str] = []
-        self._auxiliary_images: dict[int, bytes | None] = {}
-        self._secondary_anpr_images: dict[int, bytes | None] = {}
+        self._anpr_plates: list[str] = []
+        self._anpr_statuses: list[str] = []
+        self._anpr_frame_buffers: dict[int, list[bytes]] = {}
+        self._fleet_snapshots: dict[str, bytes | None] = {}
 
         self._anpr_thread: threading.Thread | None = None
-        self._aux_thread: threading.Thread | None = None
+        self._fleet_snapshot_thread: threading.Thread | None = None
         self._stop_anpr_event = threading.Event()
 
         self._post_stability_start_time: float = 0.0
@@ -73,7 +72,6 @@ class WeighbridgeSessionManager:
             if self.phase != SessionPhase.PHASE_IDLE:
                 return
 
-            # Ensure any lingering thread from previous session is stopped
             if self._anpr_thread and self._anpr_thread.is_alive():
                 self._stop_anpr_event.set()
                 old_thread = self._anpr_thread
@@ -84,11 +82,10 @@ class WeighbridgeSessionManager:
             self.session_id = f"SESS_{int(time.time())}_{uuid.uuid4().hex[:6]}"
             self.phase = SessionPhase.PHASE_STABILIZING
             self.stable_weight = 0.0
-            self._cam1_frames.clear()
-            self._cam1_plates.clear()
-            self._cam1_statuses.clear()
-            self._auxiliary_images.clear()
-            self._secondary_anpr_images.clear()
+            self._anpr_plates.clear()
+            self._anpr_statuses.clear()
+            self._anpr_frame_buffers.clear()
+            self._fleet_snapshots.clear()
             self._stop_anpr_event = threading.Event()
 
             logger.info(f"[Session] Started new weighbridge session: {self.session_id}")
@@ -96,7 +93,6 @@ class WeighbridgeSessionManager:
             current_session_id = self.session_id
             current_stop_event = self._stop_anpr_event
 
-            # Launch Camera ANPR capture loop thread bound to this session
             self._anpr_thread = threading.Thread(
                 target=self._anpr_loop,
                 args=(current_session_id, current_stop_event),
@@ -121,20 +117,18 @@ class WeighbridgeSessionManager:
                 continue
 
             with self._lock:
-                if cam_idx == 1:
-                    if len(self._cam1_frames) >= 5:
-                        self._cam1_frames.pop(0)
-                    self._cam1_frames.append(img_bytes)
-                else:
-                    self._secondary_anpr_images[cam_idx] = img_bytes
+                buf = self._anpr_frame_buffers.setdefault(cam_idx, [])
+                if len(buf) >= 5:
+                    buf.pop(0)
+                buf.append(img_bytes)
 
             logger.info(f"[ANPR] Camera {cam_idx} snapshot captured ({len(img_bytes)} bytes). Sending to Argus...")
             plate, status_code = send_frame_to_anpr_server(img_bytes)
             with self._lock:
                 if plate:
-                    self._cam1_plates.append(plate)
-                self._cam1_statuses.append(status_code)
-                sample_count = len(self._cam1_plates)
+                    self._anpr_plates.append(plate)
+                self._anpr_statuses.append(status_code)
+                sample_count = len(self._anpr_plates)
 
             if plate:
                 logger.info(
@@ -147,8 +141,8 @@ class WeighbridgeSessionManager:
                 )
 
     def _anpr_loop(self, session_id: str, stop_event: threading.Event):
-        """Background thread executing 2-second Camera 1 capture & ANPR requests."""
-        logger.info(f"[Session {session_id}] Camera 1 ANPR capture loop started.")
+        """Background thread executing 2-second multi-camera capture & ANPR requests."""
+        logger.info(f"[Session {session_id}] Multi-camera ANPR capture loop started.")
         while not stop_event.is_set():
             with self._lock:
                 if self.session_id != session_id or self.phase == SessionPhase.PHASE_IDLE:
@@ -171,7 +165,7 @@ class WeighbridgeSessionManager:
             if stop_event.wait(timeout=sleep_time):
                 break
 
-        logger.info(f"[Session {session_id}] Camera 1 ANPR capture loop stopped.")
+        logger.info(f"[Session {session_id}] Multi-camera ANPR capture loop stopped.")
 
     def on_weight_stabilized(self, weight: float):
         """Called when scale stability machine confirms 10s weight stability."""
@@ -184,39 +178,35 @@ class WeighbridgeSessionManager:
             self._post_stability_start_time = time.time()
             logger.info(
                 f"[Session {self.session_id}] Weight stabilized at {weight:.3f} kg. "
-                f"Triggering auxiliary camera snapshots and starting +10s countdown..."
+                f"Triggering all-camera snapshots and starting +10s countdown..."
             )
 
-        # Concurrently capture auxiliary overview cameras (2 ... N) in background thread
-        self._aux_thread = threading.Thread(
-            target=self._capture_auxiliary_in_background,
-            name=f"AuxCapture_{self.session_id}",
+        self._fleet_snapshot_thread = threading.Thread(
+            target=self._capture_all_cameras_in_background,
+            name=f"FleetCapture_{self.session_id}",
             daemon=True,
         )
-        self._aux_thread.start()
+        self._fleet_snapshot_thread.start()
 
-    def _capture_auxiliary_in_background(self) -> None:
-        """Background worker to fetch auxiliary snapshots without stalling real-time scale reads."""
+    def _capture_all_cameras_in_background(self) -> None:
+        """Background worker to fetch full-fleet snapshots without stalling real-time scale reads."""
         try:
-            aux_images = capture_auxiliary_snapshots()
+            snapshots = capture_all_camera_snapshots()
             with self._lock:
                 if self.phase in (SessionPhase.PHASE_POST_STABILITY, SessionPhase.PHASE_COMPLETED):
-                    self._auxiliary_images = aux_images
+                    self._fleet_snapshots = snapshots
         except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
-            logger.error(f"[Session {self.session_id}] Error capturing auxiliary cameras: {e}")
+            logger.error(f"[Session {self.session_id}] Error capturing full-fleet cameras: {e}")
 
     def check_session_progress(self) -> dict[str, Any] | None:
-        """
-        Periodically called in loop. Checks if 10-second post-stabilization timer expired.
-        If expired, finalizes session, stops ANPR loop, and returns full session package.
-        """
+        """Checks if 10s post-stabilization timer expired. Finalizes session if so."""
         with self._lock:
             if self.phase != SessionPhase.PHASE_POST_STABILITY:
                 return None
 
             elapsed = time.time() - self._post_stability_start_time
             if elapsed < POST_STABILITY_DURATION:
-                return None  # Still waiting out the 10-second post-stabilization period
+                return None
 
             logger.info(
                 f"[Session {self.session_id}] Post-stabilization 10s completed. "
@@ -225,59 +215,47 @@ class WeighbridgeSessionManager:
             self.phase = SessionPhase.PHASE_COMPLETED
             self._stop_anpr_event.set()
 
-        # Build final session package
-        final_package = self._finalize_session_package()
-        return final_package
+        return self._finalize_session_package()
 
     def _finalize_session_package(self) -> dict[str, Any]:
         """Assembles final session dictionary data."""
-        if self._aux_thread and self._aux_thread.is_alive():
-            self._aux_thread.join(timeout=1.0)
+        if self._fleet_snapshot_thread and self._fleet_snapshot_thread.is_alive():
+            self._fleet_snapshot_thread.join(timeout=1.0)
 
         with self._lock:
-            if self._cam1_plates:
-                final_anpr_plate = get_highest_frequency_plate(self._cam1_plates)
-            elif self._cam1_statuses:
-                # Forward the exact Argus error/status code as the plate value to Gluvok Cloud API
-                final_anpr_plate = get_highest_frequency_plate(self._cam1_statuses)
+            if self._anpr_plates:
+                final_anpr_plate = get_highest_frequency_plate(self._anpr_plates)
             else:
                 final_anpr_plate = "NO_PLATE_DETECTED"
 
-            last_cam1_image = self._cam1_frames[-1] if self._cam1_frames else None
-            aux_copy: dict[int | str, bytes | None] = {
-                k: v for k, v in self._auxiliary_images.items()
-            }
-            # Include secondary ANPR camera snapshots (e.g. Rear ANPR Cam 2) in auxiliary images
-            # so they get spooled into local SQLite spool_images
-            for sec_idx, sec_img in self._secondary_anpr_images.items():
-                if sec_img:
-                    aux_copy[f"anpr_{sec_idx}"] = sec_img
+            fleet_copy: dict[str, bytes | None] = dict(self._fleet_snapshots)
+            for cam_idx, frames in self._anpr_frame_buffers.items():
+                label = f"anpr_{cam_idx}"
+                if not fleet_copy.get(label) and frames:
+                    fleet_copy[label] = frames[-1]
 
-            total_samples = len(self._cam1_plates)
-            total_frames = len(self._cam1_frames)
+            total_samples = len(self._anpr_plates)
+            total_frames = sum(len(f) for f in self._anpr_frame_buffers.values())
 
             package = {
                 "session_id": self.session_id,
                 "weight": round(self.stable_weight, 3),
                 "anpr_plate": final_anpr_plate,
-                "cam1_final_image": last_cam1_image,
-                "auxiliary_images": aux_copy,
+                "camera_snapshots": fleet_copy,
                 "total_anpr_samples": total_samples,
-                "total_cam1_frames": total_frames,
+                "total_anpr_frames": total_frames,
                 "timestamp": time.time(),
             }
 
-            # Immediately release intermediate frame buffers from RAM
-            self._cam1_frames.clear()
-            self._auxiliary_images.clear()
-            self._secondary_anpr_images.clear()
+            self._anpr_frame_buffers.clear()
+            self._fleet_snapshots.clear()
 
             logger.info(
                 f"[Session {self.session_id}] Package finalized: "
                 f"Plate='{final_anpr_plate}', Weight={self.stable_weight:.3f} kg, "
-                f"Cam1 Frames={total_frames}, Aux Cams={len(aux_copy)}"
+                f"Total Snapshots={len(fleet_copy)}"
             )
-            is_err = bool(not self._cam1_plates)
+            is_err = bool(not self._anpr_plates)
             _record_session_telemetry(self.session_id, final_anpr_plate, self.stable_weight, is_err)
             return package
 
@@ -292,15 +270,14 @@ class WeighbridgeSessionManager:
             old_anpr_thread = self._anpr_thread
             self._anpr_thread = None
             self._stop_anpr_event = threading.Event()
-            self._aux_thread = None
+            self._fleet_snapshot_thread = None
             self.phase = SessionPhase.PHASE_IDLE
             self.session_id = None
             self.stable_weight = 0.0
-            self._cam1_frames.clear()
-            self._cam1_plates.clear()
-            self._cam1_statuses.clear()
-            self._auxiliary_images.clear()
-            self._secondary_anpr_images.clear()
+            self._anpr_frame_buffers.clear()
+            self._anpr_plates.clear()
+            self._anpr_statuses.clear()
+            self._fleet_snapshots.clear()
 
         if old_anpr_thread and old_anpr_thread.is_alive():
             old_anpr_thread.join(timeout=0.3)

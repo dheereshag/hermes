@@ -7,10 +7,7 @@ import requests
 
 from src.config import ConfigManager, config
 from src.core.telemetry import get_error_counts, get_system_events, reset_state
-from src.integrations.gluvok import (
-    get_device_headers,
-    post_to_cloud,
-)
+from src.integrations.gluvok import post_to_cloud
 
 
 class TestCloudPost(unittest.TestCase):
@@ -19,11 +16,6 @@ class TestCloudPost(unittest.TestCase):
 
     def tearDown(self):
         reset_state()
-
-    def test_get_device_headers(self):
-        headers = get_device_headers()
-        self.assertEqual(headers["x-device-id"], str(config.device_id))
-        self.assertEqual(headers["x-device-key"], str(config.device_key))
 
     @patch("src.integrations.gluvok.requests.post")
     def test_post_to_cloud_success_201_preserves_payload(self, mock_post: Mock):
@@ -34,8 +26,7 @@ class TestCloudPost(unittest.TestCase):
         session = {
             "weight": 35200.0,
             "anpr_plate": "DL1CAB1234",
-            "cam1_final_image": b"truck_img",
-            "auxiliary_images": {},
+            "camera_snapshots": {"anpr_1": b"truck_img"},
         }
         post_to_cloud(session)
 
@@ -126,6 +117,29 @@ class TestCloudPost(unittest.TestCase):
 
         error_counts = get_error_counts()
         self.assertGreaterEqual(error_counts.get("CLOUD_UPLOAD_ERROR", 0), 1)
+
+    @patch("src.integrations.gluvok.requests.post")
+    def test_post_to_cloud_with_camera_snapshots(self, mock_post: Mock):
+        mock_resp = Mock(status_code=201, content=b'{"data": {"id": 105}}')
+        mock_resp.json.return_value = {"data": {"id": 105}}
+        mock_post.return_value = mock_resp
+
+        session = {
+            "weight": 44100.0,
+            "anpr_plate": "HR26DK8333",
+            "camera_snapshots": {
+                "anpr_1": b"front_img",
+                "anpr_2": b"rear_img",
+                "aux_1": b"cabin_img",
+            },
+        }
+        post_to_cloud(session)
+
+        mock_post.assert_called_once()
+        files = mock_post.call_args.kwargs["files"]
+        self.assertEqual(len(files), 3)
+        filenames = [f[1][0] for f in files]
+        self.assertEqual(filenames, ["truck_anpr_1.jpg", "truck_anpr_2.jpg", "truck_aux_1.jpg"])
 
 
 if __name__ == "__main__":

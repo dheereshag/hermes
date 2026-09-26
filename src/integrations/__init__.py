@@ -5,20 +5,16 @@ from src.integrations.anpr import (
 )
 from src.integrations.gluvok import (
     GLUVOK_BASE_URL,
-    get_device_headers,
     post_to_cloud,
-    sanitize_vehicle_number,
     transmit_entry_multipart,
     verify_entry_in_cloud,
 )
 
 __all__ = [
     "GLUVOK_BASE_URL",
-    "get_device_headers",
     "get_highest_frequency_plate",
     "post_to_cloud",
     "resolve_anpr_endpoint",
-    "sanitize_vehicle_number",
     "send_frame_to_anpr_server",
     "transmit_entry_multipart",
     "verify_entry_in_cloud",

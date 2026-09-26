@@ -123,22 +123,41 @@ def _get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _insert_spool_images(
+    conn: sqlite3.Connection, session_id: str, session_package: dict[str, Any]
+) -> None:
+    fleet_dict = session_package.get("camera_snapshots", {})
+    if isinstance(fleet_dict, dict):
+        for cam_name in sorted(fleet_dict.keys()):
+            img_bytes = fleet_dict[cam_name]
+            if img_bytes and isinstance(img_bytes, bytes):
+                conn.execute(
+                    """
+                    INSERT INTO spool_images (
+                        session_id, camera_name, filename, image_data, content_type
+                    ) VALUES (?, ?, ?, ?, 'image/jpeg');
+                    """,
+                    (session_id, cam_name, f"{session_id}_{cam_name}.jpg", img_bytes),
+                )
+
+
 def spool_weighment(session_package: dict[str, Any]) -> str:
     """
     Atomically writes weighment record and camera images to SQLite with status PENDING.
     Guarantees persistence before any cloud upload attempt.
     """
-    from src.integrations.gluvok import sanitize_vehicle_number
-
     session_id = str(session_package.get("session_id", f"SESS_{int(time.time())}"))
     weight = float(session_package.get("weight", 0.0))
-    raw_plate = str(session_package.get("anpr_plate", "NO_PLATE_DETECTED"))
-    detected_plate, _ = sanitize_vehicle_number(raw_plate)
+    raw_plate = str(session_package.get("anpr_plate", "NO_PLATE_DETECTED")).strip().upper()
+    plate = (
+        "NO_PLATE_DETECTED"
+        if not raw_plate or raw_plate in ("UNKNOWN_PLATE", "UNKNOWN", "NONE", "NULL", "SUCCESS")
+        else raw_plate
+    )
     center_id = int(config.center_id)
     now = time.time()
 
     with _db_lock, _get_connection() as conn:
-        # Idempotent insert: if session_id already exists, ignore duplicate insert
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -147,41 +166,14 @@ def spool_weighment(session_package: dict[str, Any]) -> str:
                 detected_vehicle_number, center_id, next_retry_at
             ) VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?);
             """,
-            (session_id, now, round(weight, 3), raw_plate, detected_plate, center_id, now),
+            (session_id, now, round(weight, 3), plate, plate, center_id, now),
         )
 
         if cursor.rowcount > 0:
-            # Store primary Camera 1 snapshot
-            cam1_bytes = session_package.get("cam1_final_image")
-            if cam1_bytes and isinstance(cam1_bytes, bytes):
-                conn.execute(
-                    """
-                    INSERT INTO spool_images (
-                        session_id, camera_name, filename, image_data, content_type
-                    ) VALUES (?, 'cam1', ?, ?, 'image/jpeg');
-                    """,
-                    (session_id, f"{session_id}_cam1.jpg", cam1_bytes),
-                )
-
-            # Store any auxiliary camera snapshots
-            aux_dict = session_package.get("auxiliary_images", {})
-            if isinstance(aux_dict, dict):
-                for cam_idx in sorted(aux_dict.keys(), key=lambda k: str(k)):
-                    img_bytes = aux_dict[cam_idx]
-                    if img_bytes and isinstance(img_bytes, bytes):
-                        str_idx = str(cam_idx)
-                        cam_name = str_idx if str_idx.startswith(("anpr_", "aux_")) else f"aux_{str_idx}"
-                        conn.execute(
-                            """
-                            INSERT INTO spool_images (
-                                session_id, camera_name, filename, image_data, content_type
-                            ) VALUES (?, ?, ?, ?, 'image/jpeg');
-                            """,
-                            (session_id, cam_name, f"{session_id}_{cam_name}.jpg", img_bytes),
-                        )
+            _insert_spool_images(conn, session_id, session_package)
             conn.commit()
             logger.info(
-                f"[Spool DB] Spooled session {session_id} ({detected_plate}, {weight:.3f} kg) to SQLite."
+                f"[Spool DB] Spooled session {session_id} ({plate}, {weight:.3f} kg) to SQLite."
             )
         else:
             logger.warning(
