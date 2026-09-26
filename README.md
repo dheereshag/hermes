@@ -71,21 +71,52 @@ uv run python scripts/deploy.py \
 ---
 
 #### 🔍 Monitoring & Service Control
-Hermes runs continuously in the background as a systemd service:
+Hermes and the Argus ANPR microservice run as background `systemd` services on the Raspberry Pi:
 
+##### 📜 Live Streaming Logs (`journalctl`)
+Run directly on the Pi (`gluvok@hermes:~ $`):
 ```bash
-# Check service status:
-ssh gluvok@hermes.local "sudo systemctl status hermes"
+# Follow Hermes logs:
+sudo journalctl -u hermes -f
 
-# Follow live streaming logs:
+# Follow Argus ANPR logs:
+sudo journalctl -u argus -f
+
+# Follow both Hermes & Argus logs combined in a single stream:
+sudo journalctl -u hermes -u argus -f
+
+# Follow both with the last 100 lines of history:
+sudo journalctl -u hermes -u argus -f -n 100
+```
+
+Or remotely from your workstation via SSH:
+```bash
+# Follow Hermes logs:
 ssh gluvok@hermes.local "sudo journalctl -u hermes -f"
 
-# Restart or stop service:
-ssh gluvok@hermes.local "sudo systemctl restart hermes"
-ssh gluvok@hermes.local "sudo systemctl stop hermes"
+# Follow Argus ANPR logs:
+ssh gluvok@hermes.local "sudo journalctl -u argus -f"
 
-# Run manually/interactively in foreground:
-ssh gluvok@hermes.local "cd /opt/hermes && ./run.sh"
+# Follow both Hermes & Argus combined:
+ssh gluvok@hermes.local "sudo journalctl -u hermes -u argus -f"
+```
+
+##### ⚙️ Service Management (`systemctl`)
+```bash
+# Check service status:
+sudo systemctl status hermes
+sudo systemctl status argus
+
+# Restart services:
+sudo systemctl restart hermes
+sudo systemctl restart argus
+
+# Stop services:
+sudo systemctl stop hermes
+sudo systemctl stop argus
+
+# Run Hermes manually/interactively in foreground:
+cd /opt/hermes && ./run.sh
 ```
 
 ---
