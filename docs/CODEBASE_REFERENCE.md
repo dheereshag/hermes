@@ -154,9 +154,9 @@ Centralized repository of timing windows, timeouts, buffer boundaries, NetworkMa
   - `STABILITY_TOLERANCE = 2.0`: Maximum allowable variance (±2.0 kg).
 - **Camera & ANPR Timings**:
   - `ANPR_CAPTURE_INTERVAL = 2.0`: Interval (seconds) between plate capture attempts.
-  - `POST_STABILITY_DURATION = 10.0`: Buffer time (seconds) after scale confirms stable weight before closing session.
+  - `POST_STABILITY_DURATION = 5.0`: Buffer time (seconds) after scale confirms stable weight before closing session.
   - `CAMERA_TIMEOUT = 3.0`: HTTP snapshot request timeout.
-  - `ANPR_SERVER_TIMEOUT = 15.0`: Argus ANPR REST query timeout.
+  - `ANPR_SERVER_TIMEOUT = 30.0`: Argus ANPR REST query timeout.
   - `MAX_PARALLEL_CAMERA_WORKERS = 4`: Auxiliary camera snapshot thread pool worker cap.
 - **Cloud & Network Timings**:
   - `CLOUD_POST_TIMEOUT = 20.0`: Maximum timeout for Gluvok cloud JSON payload upload.
@@ -173,18 +173,19 @@ Centralized repository of timing windows, timeouts, buffer boundaries, NetworkMa
 ## 4. Core Logic Subsystem (`src/core/`)
 
 ### `src/core/session.py`
-Coordinates weighbridge session lifecycle, multi-camera coordination, consensus plate voting, and payload packaging.
+Coordinates weighbridge session lifecycle, multi-camera coordination, consensus plate voting, mid-stability pre-compression, and payload packaging.
 
 - **Enum `SessionPhase`**:
   - `PHASE_IDLE (0)`: No vehicle active.
-  - `PHASE_STABILIZING (1)`: Vehicle detected (>50kg); 2-second Camera 1 ANPR capture loop running.
-  - `PHASE_POST_STABILITY (2)`: Weight stable; auxiliary cameras captured; +10s timer running.
+  - `PHASE_STABILIZING (1)`: Vehicle detected (>50kg); 2-second Camera 1 ANPR capture loop running; halfway mark triggers fleet pre-compression.
+  - `PHASE_POST_STABILITY (2)`: Weight stable; fleet snapshots ready; +5s countdown running.
   - `PHASE_COMPLETED (3)`: Package assembled and dispatched; waiting for truck to exit platform.
 - **Class: `WeighbridgeSessionManager`**:
   - **`start_session() -> None`**: Generates unique `session_id` (`SESS_<epoch>_<uuid>`), transitions to `PHASE_STABILIZING`, and spawns daemon thread `_anpr_loop`.
   - **`_anpr_loop() -> None`**: Background worker capturing Camera 1 every 2.0 seconds and sending frames to Argus ANPR. Retains only the last 5 frames in memory to prevent RAM bloat on edge devices.
-  - **`on_weight_stabilized(weight: float) -> None`**: Transitions to `PHASE_POST_STABILITY`, triggers parallel auxiliary camera snapshots (`capture_auxiliary_snapshots`), and starts the 10-second post-stability countdown.
-  - **`check_session_progress() -> dict[str, Any] | None`**: Checks if the 10-second post-stability duration has completed. If expired, transitions to `PHASE_COMPLETED`, stops the ANPR loop, and calls `_finalize_session_package()`.
+  - **`trigger_mid_stability_fleet_capture() -> None`**: Triggered halfway through stability (5s) to capture all cameras in parallel and pre-compress them to high-clarity JPEG (Q85, max 1920px) in RAM.
+  - **`on_weight_stabilized(weight: float) -> None`**: Transitions to `PHASE_POST_STABILITY` and starts the 5-second post-stability countdown.
+  - **`check_session_progress() -> dict[str, Any] | None`**: Checks if the 5-second post-stability duration has completed. If expired, transitions to `PHASE_COMPLETED`, stops the ANPR loop immediately without blocking for pending Argus requests, and calls `_finalize_session_package()`.
   - **`_finalize_session_package() -> dict[str, Any]`**: Assembles final payload: stable weight, highest-voted plate (or fallback error code), Camera 1 final JPEG, auxiliary camera JPEGs, sample statistics, and logs telemetry. Immediately releases raw frame buffers from memory.
   - **`reset_session() -> None`**: Resets all state variables when weight returns to zero.
 - **Global**: `session_manager = WeighbridgeSessionManager()`

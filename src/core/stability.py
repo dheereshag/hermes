@@ -32,12 +32,14 @@ class ScaleStabilityMachine:
         self.last_weight = 0.0
         self._current_stable_candidate = 0.0
         self._candidate_start_time = 0.0
+        self._mid_stability_triggered = False
         self._last_printed_weight = -9999.0
 
     def _reset_candidate_state(self):
         self.state = ScaleState.SCALE_IDLE
         self._current_stable_candidate = 0.0
         self._candidate_start_time = 0.0
+        self._mid_stability_triggered = False
 
     def _log_weight_change(self, parsed_weight: float):
         if abs(parsed_weight - self._last_printed_weight) >= 0.1:
@@ -70,10 +72,17 @@ class ScaleStabilityMachine:
     def _evaluate_stability_window(self, parsed_weight: float, now: float):
         if abs(parsed_weight - self._current_stable_candidate) <= STABILITY_TOLERANCE:
             elapsed = now - self._candidate_start_time
+            if elapsed >= (STABILITY_DURATION / 2.0) and not self._mid_stability_triggered:
+                self._mid_stability_triggered = True
+                logger.info(
+                    f"[Scale Session] Weight steady for {elapsed:.1f}s (halfway). "
+                    "Triggering mid-stability fleet capture & pre-compression..."
+                )
+                session_manager.trigger_mid_stability_fleet_capture()
             if elapsed >= STABILITY_DURATION:
                 logger.info(
                     f"[Scale Session] Stable weight confirmed (10s): "
-                    f"{self._current_stable_candidate:.3f} kg. Triggering auxiliary cameras..."
+                    f"{self._current_stable_candidate:.3f} kg. Locking stable weight..."
                 )
                 self.state = ScaleState.SCALE_STABLE_RECORDED
                 session_manager.on_weight_stabilized(self._current_stable_candidate)
@@ -84,6 +93,7 @@ class ScaleStabilityMachine:
             )
             self._current_stable_candidate = parsed_weight
             self._candidate_start_time = now
+            self._mid_stability_triggered = False
 
     def process_new_weight(self, parsed_weight: float):
         now = time.time()

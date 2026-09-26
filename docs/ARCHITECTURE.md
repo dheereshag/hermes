@@ -51,7 +51,7 @@ graph TD
 - **Weight Scale Serial Parsing**: Reads continuous raw serial stream from UART (`/dev/ttyAMA0` or USB-to-Serial at 1200 Baud 8N1).
 - **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
 - **Multi-Camera ANPR OCR & Consensus Voting**: Concurrently captures frames from all configured ANPR cameras (Front, Rear, etc.) every 2 seconds during active weighing and elects the highest-frequency plate candidate.
-- **Synchronized Full-Fleet Camera Snapshots**: Captures high-resolution snapshots across all cameras (every ANPR camera + every auxiliary camera) in parallel upon weight stabilization.
+- **Synchronized Full-Fleet Camera Snapshots & Pre-Compression**: Captures high-resolution snapshots across all cameras in parallel halfway through the stability window (t=5s) and pre-compresses them to high-clarity JPEG (Q85, max 1920px) in RAM, eliminating finalization delays upon weight stabilization.
 - **Non-Blocking Real-Time Threading**: Scale serial reading is completely decoupled from disk spooling and network I/O; cloud uploads and camera captures are dispatched in dedicated background threads.
 - **Gluvok Cloud API Multipart Integration**: Matches curl specification (`curl -X POST ... -u "pi1:hardware123" -F "center_id=..." -F "detected_vehicle_number=..." -F "weight=..." -F "file=@..."`).
 - **Web Diagnostics Dashboard**: Modular Flask application factory on port `8080` displaying live scale weight, ANPR status, cloud spool queue counts, error monitoring, and configuration.
@@ -142,8 +142,9 @@ hermes/
 - **`WeighbridgeSessionManager` (`session.py`)**:
   - Coordinates the session lifecycle (`PHASE_IDLE` -> `PHASE_STABILIZING` -> `PHASE_POST_STABILITY` -> `PHASE_COMPLETED`).
   - Runs a 2-second concurrent capture loop across all configured ANPR cameras during the stabilization phase.
-  - Triggers asynchronous full-fleet camera snapshot capture (`capture_all_camera_snapshots`) upon weight stabilization.
-  - Assembles the final session package containing stable weight, highest-voted consensus plate, and all camera images in `camera_snapshots`.
+  - Triggers asynchronous full-fleet camera snapshot capture and in-RAM JPEG compression halfway through stability (t=5s).
+  - Enforces a reduced 5-second post-stability window, finalizing the session immediately without waiting on slow in-flight Argus calls.
+  - Assembles the final session package containing stable weight, highest-voted consensus plate, and pre-compressed camera images in `camera_snapshots`.
 - **`ScaleStabilityMachine` (`stability.py`)**:
   - Requires weight to exceed `min_weight` (default `50.0 kg`) to trigger a weighing session.
   - Implements a continuous 10-second stability check (`STABILITY_TOLERANCE = ±2.0 kg`, `STABILITY_DURATION = 10.0s`).

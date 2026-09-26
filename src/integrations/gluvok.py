@@ -16,6 +16,7 @@ import requests
 from src.config import config
 from src.config.constants import CLOUD_POST_TIMEOUT, GLUVOK_BASE_URL
 from src.core.telemetry import record_error_event, record_system_event
+from src.services.image_compressor import compress_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,12 @@ def _build_multipart_files(
     if images:
         for fname, b in images:
             if b and isinstance(b, bytes) and len(b) > 0:
-                valid_images.append((fname, b))
+                compressed = compress_image_bytes(b) or b
+                valid_images.append((fname, compressed))
 
     if not valid_images and image_bytes and isinstance(image_bytes, bytes) and len(image_bytes) > 0:
-        valid_images.append((filename, image_bytes))
+        compressed = compress_image_bytes(image_bytes) or image_bytes
+        valid_images.append((filename, compressed))
 
     if valid_images:
         files: list[tuple[str, tuple[str, bytes, str]]] = [

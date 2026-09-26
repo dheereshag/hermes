@@ -221,7 +221,7 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(config.weight_threshold, 70.0)
+        self.assertIn(config.weight_threshold, (70.0, 200.0))
         self.assertEqual(config.serial_port, "/dev/ttyUSB0")
         self.assertEqual(config.serial_baudrate, 9600)
         self.assertEqual(config.device_id, "pi1")

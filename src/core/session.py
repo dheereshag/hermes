@@ -30,6 +30,7 @@ from src.integrations.anpr import (
     get_highest_frequency_plate,
     send_frame_to_anpr_server,
 )
+from src.services.image_compressor import compress_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,24 @@ class WeighbridgeSessionManager:
 
         logger.info(f"[Session {session_id}] Multi-camera ANPR capture loop stopped.")
 
+    def trigger_mid_stability_fleet_capture(self) -> None:
+        """Trigger parallel fleet capture and background pre-compression halfway through stability."""
+        with self._lock:
+            if self.phase != SessionPhase.PHASE_STABILIZING:
+                return
+            if self._fleet_snapshot_thread and self._fleet_snapshot_thread.is_alive():
+                return
+            logger.info(
+                f"[Session {self.session_id}] Mid-stability mark reached. "
+                "Triggering all-camera snapshots and pre-compressing in background..."
+            )
+            self._fleet_snapshot_thread = threading.Thread(
+                target=self._capture_all_cameras_in_background,
+                name=f"FleetCapture_{self.session_id}",
+                daemon=True,
+            )
+            self._fleet_snapshot_thread.start()
+
     def on_weight_stabilized(self, weight: float):
         """Called when scale stability machine confirms 10s weight stability."""
         with self._lock:
@@ -178,28 +197,46 @@ class WeighbridgeSessionManager:
             self._post_stability_start_time = time.time()
             logger.info(
                 f"[Session {self.session_id}] Weight stabilized at {weight:.3f} kg. "
-                f"Triggering all-camera snapshots and starting +10s countdown..."
+                f"Starting {POST_STABILITY_DURATION:.1f}s post-stabilization countdown..."
             )
 
-        self._fleet_snapshot_thread = threading.Thread(
-            target=self._capture_all_cameras_in_background,
-            name=f"FleetCapture_{self.session_id}",
-            daemon=True,
-        )
-        self._fleet_snapshot_thread.start()
+        need_fleet_thread = False
+        with self._lock:
+            if not self._fleet_snapshots and (
+                not self._fleet_snapshot_thread or not self._fleet_snapshot_thread.is_alive()
+            ):
+                need_fleet_thread = True
+        if need_fleet_thread:
+            self._fleet_snapshot_thread = threading.Thread(
+                target=self._capture_all_cameras_in_background,
+                name=f"FleetCapture_{self.session_id}",
+                daemon=True,
+            )
+            self._fleet_snapshot_thread.start()
 
     def _capture_all_cameras_in_background(self) -> None:
-        """Background worker to fetch full-fleet snapshots without stalling real-time scale reads."""
+        """Background worker to fetch full-fleet snapshots and pre-compress them in RAM."""
         try:
             snapshots = capture_all_camera_snapshots()
+            compressed: dict[str, bytes | None] = {}
+            for label, img_bytes in snapshots.items():
+                compressed[label] = compress_image_bytes(img_bytes) if img_bytes else None
             with self._lock:
-                if self.phase in (SessionPhase.PHASE_POST_STABILITY, SessionPhase.PHASE_COMPLETED):
-                    self._fleet_snapshots = snapshots
+                if self.phase in (
+                    SessionPhase.PHASE_STABILIZING,
+                    SessionPhase.PHASE_POST_STABILITY,
+                    SessionPhase.PHASE_COMPLETED,
+                ):
+                    self._fleet_snapshots = compressed
+                    logger.info(
+                        f"[Session {self.session_id}] {len(compressed)} fleet snapshots "
+                        "captured and compressed in RAM."
+                    )
         except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
             logger.error(f"[Session {self.session_id}] Error capturing full-fleet cameras: {e}")
 
     def check_session_progress(self) -> dict[str, Any] | None:
-        """Checks if 10s post-stabilization timer expired. Finalizes session if so."""
+        """Checks if post-stabilization timer expired. Finalizes session immediately without blocking."""
         with self._lock:
             if self.phase != SessionPhase.PHASE_POST_STABILITY:
                 return None
@@ -209,8 +246,8 @@ class WeighbridgeSessionManager:
                 return None
 
             logger.info(
-                f"[Session {self.session_id}] Post-stabilization 10s completed. "
-                f"Finalizing session package..."
+                f"[Session {self.session_id}] Post-stabilization {POST_STABILITY_DURATION:.1f}s completed. "
+                "Finalizing session package immediately (stopping ANPR without blocking)..."
             )
             self.phase = SessionPhase.PHASE_COMPLETED
             self._stop_anpr_event.set()
@@ -220,7 +257,7 @@ class WeighbridgeSessionManager:
     def _finalize_session_package(self) -> dict[str, Any]:
         """Assembles final session dictionary data."""
         if self._fleet_snapshot_thread and self._fleet_snapshot_thread.is_alive():
-            self._fleet_snapshot_thread.join(timeout=1.0)
+            self._fleet_snapshot_thread.join(timeout=0.3)
 
         with self._lock:
             if self._anpr_plates:
@@ -232,7 +269,7 @@ class WeighbridgeSessionManager:
             for cam_idx, frames in self._anpr_frame_buffers.items():
                 label = f"anpr_{cam_idx}"
                 if not fleet_copy.get(label) and frames:
-                    fleet_copy[label] = frames[-1]
+                    fleet_copy[label] = compress_image_bytes(frames[-1])
 
             total_samples = len(self._anpr_plates)
             total_frames = sum(len(f) for f in self._anpr_frame_buffers.values())
