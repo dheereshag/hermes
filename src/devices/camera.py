@@ -201,9 +201,33 @@ def capture_all_camera_snapshots(
     return results
 
 
+def log_camera_fleet() -> None:
+    """Logs the configured main (ANPR) and auxiliary camera fleet at startup."""
+    anpr_urls = config.anpr_camera_urls
+    aux_urls = config.auxiliary_camera_urls
+
+    logger.info("[Cameras] Configured Camera Fleet:")
+    if anpr_urls:
+        logger.info(f"  ├── Main / ANPR Cameras ({len(anpr_urls)} configured - active loop):")
+        for idx, url in enumerate(anpr_urls):
+            prefix = "└──" if idx == len(anpr_urls) - 1 and not aux_urls else "├──"
+            logger.info(f"  │     {prefix} [Cam {idx + 1} - ANPR] {url}")
+    else:
+        logger.warning("  ├── Main / ANPR Cameras: (None configured)")
+
+    if aux_urls:
+        logger.info(f"  └── Auxiliary Cameras ({len(aux_urls)} configured - post-stability audit):")
+        for idx, url in enumerate(aux_urls):
+            prefix = "└──" if idx == len(aux_urls) - 1 else "├──"
+            logger.info(f"        {prefix} [Aux {idx + 1}] {url}")
+    else:
+        logger.info("  └── Auxiliary Cameras: (None configured)")
+
+
 __all__ = [
     "capture_all_camera_snapshots",
     "capture_anpr_snapshots",
     "capture_auxiliary_snapshots",
     "fetch_image_bytes",
+    "log_camera_fleet",
 ]

@@ -42,6 +42,21 @@ def _check_argus_online(anpr_url: str) -> bool:
         return False
 
 
+_last_argus_check_time: float = 0.0
+_last_argus_online_status: bool = False
+_ARGUS_CACHE_TTL_S: float = 5.0
+
+
+def _get_cached_argus_status(target_url: str) -> bool:
+    """Returns cached Argus health status with 5s TTL to prevent log and network spamming."""
+    global _last_argus_check_time, _last_argus_online_status
+    now = time.time()
+    if now - _last_argus_check_time >= _ARGUS_CACHE_TTL_S:
+        _last_argus_online_status = _check_argus_online(target_url)
+        _last_argus_check_time = now
+    return _last_argus_online_status
+
+
 def _apply_uart_config_changes(
     serial_port: str | None,
     serial_baudrate: int | None,
@@ -104,7 +119,7 @@ def status():
     from src.integrations.anpr import resolve_anpr_endpoint
 
     target_argus_url = resolve_anpr_endpoint(config.anpr_server_url)
-    argus_online = _check_argus_online(target_argus_url)
+    argus_online = _get_cached_argus_status(target_argus_url)
 
     return jsonify({
         "status": "healthy",

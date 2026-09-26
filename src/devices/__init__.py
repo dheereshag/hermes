@@ -1,6 +1,7 @@
 from src.devices.camera import (
     capture_auxiliary_snapshots,
     fetch_image_bytes,
+    log_camera_fleet,
 )
 from src.devices.led import LEDColor, led_controller
 from src.devices.scale import (
@@ -41,6 +42,7 @@ __all__ = [
     "is_nmcli_available",
     "is_wifi_connected",
     "led_controller",
+    "log_camera_fleet",
     "start_emergency_hotspot",
     "start_wifi_watchdog",
     "stop_emergency_hotspot",

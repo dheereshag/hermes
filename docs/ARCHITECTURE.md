@@ -162,6 +162,7 @@ hermes/
   - Low-memory HTTP snapshot grabber with optional OpenCV RTSP single-frame fallback.
   - Concurrently captures snapshots from all configured cameras (ANPR + Auxiliary) using a bounded `ThreadPoolExecutor` via `capture_all_camera_snapshots()`.
   - Runs parallel multi-ANPR camera frame grabbing via `capture_anpr_snapshots()`.
+  - Logs clear camera fleet topology at startup via `log_camera_fleet()`, distinguishing Main (ANPR active loop) from Auxiliary (post-stability audit) cameras.
 - **`WiFi Manager` (`wifi.py`)**:
   - Continuously monitors active Wi-Fi connection via `nmcli`.
   - Automatically spins up an emergency Wi-Fi Access Point (`hermes` / `12345678`) on the wireless interface if connection to the facility router is lost, allowing on-site technicians to connect directly.

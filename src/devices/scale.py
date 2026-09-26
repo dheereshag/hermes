@@ -217,7 +217,7 @@ def handle_scale_char(c: str | int | bytes | bytearray):
 
 def handle_scale_char_processed(weight: float):
     """Bridge to stability state machine — called after a weight value is extracted."""
-    logger.info(f"[Scale] Parsed weight: {weight:.3f} kg")
+    logger.debug(f"[Scale] Parsed weight: {weight:.3f} kg")
     from src.core.stability import process_new_weight
     process_new_weight(weight)
 

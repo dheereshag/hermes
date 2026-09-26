@@ -37,6 +37,7 @@ from src.core import (
 from src.devices import (
     get_uart_reader,
     led_controller,
+    log_camera_fleet,
     start_wifi_watchdog,
     stop_wifi_watchdog,
 )
@@ -92,6 +93,9 @@ def setup():
         f"Center ID: {config.center_id} | "
         f"Threshold: {config.weight_threshold:.1f} kg"
     )
+
+    # Log camera topology (Main ANPR vs Auxiliary cameras)
+    log_camera_fleet()
 
     # Verify Gluvok Cloud device credentials
     if config.device_id and config.device_key:

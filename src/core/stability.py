@@ -41,7 +41,7 @@ class ScaleStabilityMachine:
 
     def _log_weight_change(self, parsed_weight: float):
         if abs(parsed_weight - self._last_printed_weight) >= 0.1:
-            logger.info(
+            logger.debug(
                 f"[Scale] Parsed weight: {parsed_weight:.3f} "
                 f"(Threshold: {config.weight_threshold:.1f})"
             )
@@ -104,6 +104,10 @@ class ScaleStabilityMachine:
             self.state = ScaleState.SCALE_STABILIZING
             self._current_stable_candidate = parsed_weight
             self._candidate_start_time = now
+            logger.info(
+                f"[Scale Session] Vehicle detected: {parsed_weight:.1f} kg "
+                f"(threshold: {config.weight_threshold:.1f} kg). Stabilizing..."
+            )
             session_manager.start_session()
             from src.devices import led_controller
             led_controller.set_active()
