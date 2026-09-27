@@ -18,7 +18,11 @@ def run_cmd(cmd: list[str]) -> None:
 
 def deploy_remote(host: str, target: str = "/opt/hermes", lic: str = "data/client.lic") -> None:
     print(f"[Deploy] 1. Preparing {target} on {host}...")
-    prep = f"sudo mkdir -p {target} && sudo chown -R $USER:$USER {target}; export PATH=\"$HOME/.local/bin:$PATH\"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh"
+    prep = (
+        f"sudo mkdir -p {target} && sudo chown -R $USER:$USER {target}; "
+        f"command -v ccache >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ccache) || true; "
+        f"export PATH=\"$HOME/.local/bin:$PATH\"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh"
+    )
     run_cmd(["ssh", "-t", host, prep])
     print(f"[Deploy] 2. Syncing source to {host}:{target}...")
     run_cmd(["rsync", "-avz", "--delete", *EXCLUDES, "./", f"{host}:{target}/"])

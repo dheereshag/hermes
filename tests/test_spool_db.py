@@ -6,6 +6,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+from src.config import config
 from src.core.db import (
     acquire_next_spool_task,
     get_spool_images,
@@ -199,8 +200,8 @@ class TestSpoolDB(unittest.TestCase):
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
 
-        # 1. Verify HTTP Basic Auth (-u "pi1:hardware123")
-        self.assertEqual(call_kwargs["auth"], ("pi1", "hardware123"))
+        # 1. Verify HTTP Basic Auth (-u f"{config.device_id}:{config.device_key}")
+        self.assertEqual(call_kwargs["auth"], (config.device_id, config.device_key))
 
         # 2. Verify form data fields (center_id, detected_vehicle_number, weight)
         self.assertEqual(call_kwargs["data"]["center_id"], "1")
