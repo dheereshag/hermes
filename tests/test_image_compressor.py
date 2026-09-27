@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from src.config.constants import POST_STABILITY_DURATION
+from src.config.constants import ANPR_CAPTURE_INTERVAL, POST_STABILITY_DURATION
 from src.core.session import WeighbridgeSessionManager
 from src.core.stability import ScaleStabilityMachine, ScaleState
 from src.services.image_compressor import compress_image_bytes
@@ -59,6 +59,19 @@ class TestImageCompressor(unittest.TestCase):
         self.assertEqual(w, 1920)
         self.assertEqual(h, 1080)
 
+    def test_compress_always_runs_for_small_image(self):
+        # Create a small image (200x200) encoded at Q100
+        img_small = np.full((200, 200, 3), 128, dtype=np.uint8)
+        ok, raw_jpeg = cv2.imencode(".jpg", img_small, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+        self.assertTrue(ok)
+        raw_bytes = raw_jpeg.tobytes()
+
+        # Should still run compression with quality=75 and produce smaller payload
+        compressed = compress_image_bytes(raw_bytes, quality=75)
+        self.assertIsNotNone(compressed)
+        assert compressed is not None
+        self.assertLess(len(compressed), len(raw_bytes))
+
 
 class TestMidStabilityAndShortPostStability(unittest.TestCase):
     def setUp(self):
@@ -71,6 +84,9 @@ class TestMidStabilityAndShortPostStability(unittest.TestCase):
 
     def test_post_stability_duration_is_5_seconds(self):
         self.assertEqual(POST_STABILITY_DURATION, 5.0)
+
+    def test_anpr_capture_interval_is_1_second(self):
+        self.assertEqual(ANPR_CAPTURE_INTERVAL, 1.0)
 
     def test_mid_stability_triggers_at_half_duration(self):
         self.machine.state = ScaleState.SCALE_STABILIZING

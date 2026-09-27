@@ -44,8 +44,8 @@ __all__ = [
 
 class SessionPhase(Enum):
     PHASE_IDLE = 0
-    PHASE_STABILIZING = 1          # Weight active, 2s Multi-ANPR OCR running
-    PHASE_POST_STABILITY = 2       # Weight stable, Full fleet cameras captured, +10s timer running
+    PHASE_STABILIZING = 1          # Weight active, 1s Multi-ANPR OCR running
+    PHASE_POST_STABILITY = 2       # Weight stable, Full fleet cameras captured, +5s timer running
     PHASE_COMPLETED = 3            # Session finished & transmitted, awaiting weight return to 0
 
 
@@ -142,7 +142,7 @@ class WeighbridgeSessionManager:
                 )
 
     def _anpr_loop(self, session_id: str, stop_event: threading.Event):
-        """Background thread executing 2-second multi-camera capture & ANPR requests."""
+        """Background thread executing 1-second multi-camera capture & ANPR requests."""
         logger.info(f"[Session {session_id}] Multi-camera ANPR capture loop started.")
         while not stop_event.is_set():
             with self._lock:

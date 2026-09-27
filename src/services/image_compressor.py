@@ -20,9 +20,6 @@ def compress_image_bytes(
             return image_bytes
 
         h, w = img.shape[:2]
-        if max(h, w) <= max_dim and len(image_bytes) <= 450_000:
-            return image_bytes
-
         if max(h, w) > max_dim:
             scale = max_dim / float(max(h, w))
             new_w = max(1, round(w * scale))
