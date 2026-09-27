@@ -8,7 +8,7 @@ import numpy as np
 def compress_image_bytes(
     image_bytes: bytes | None,
     max_dim: int = 1920,
-    quality: int = 85,
+    quality: int = 75,
 ) -> bytes | None:
     """Downscale to max_dim if larger and compress as high-clarity JPEG."""
     if not image_bytes:
