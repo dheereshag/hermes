@@ -13,30 +13,19 @@ class ConfigManager:
         self.runtime = RuntimeConfig(db_path)
         self.license = load_client_license(lic_path) or {}
 
-    def load_settings(self) -> None:
-        self.runtime.reload()
+    def load_settings(self) -> None: self.runtime.reload()
 
     @property
-    def center_id(self) -> int:
-        return int(self.license.get("center_id", cc.CENTER_ID))
-
+    def center_id(self) -> int: return int(self.license.get("center_id", cc.CENTER_ID))
     @property
-    def weight_threshold(self) -> float:
-        return float(self.license.get("min_weight", cc.MIN_WEIGHT))
-
+    def weight_threshold(self) -> float: return float(self.license.get("min_weight", cc.MIN_WEIGHT))
     min_weight = weight_threshold
-
     @property
-    def device_id(self) -> str | int:
-        return self.license.get("device_id", cc.DEVICE_ID)
-
+    def device_id(self) -> str | int: return self.license.get("device_id", cc.DEVICE_ID)
     @property
-    def device_key(self) -> str:
-        return str(self.license.get("device_key", cc.DEVICE_KEY))
-
+    def device_key(self) -> str: return str(self.license.get("device_key", cc.DEVICE_KEY))
     @property
-    def anpr_server_url(self) -> str:
-        return cc.ANPR_SERVER_URL
+    def anpr_server_url(self) -> str: return cc.ANPR_SERVER_URL
 
     @property
     def wifi_ssid(self) -> str: return str(self.runtime.get("wifi_ssid", cc.WIFI_SSID))
@@ -46,6 +35,10 @@ class ConfigManager:
     def serial_port(self) -> str: return str(self.runtime.get("serial_port", cc.SERIAL_PORT))
     @property
     def serial_baudrate(self) -> int: return int(self.runtime.get("serial_baudrate", cc.SERIAL_BAUDRATE))
+    @property
+    def stability_duration(self) -> float: return float(self.runtime.get("stability_duration", getattr(cc, "STABILITY_DURATION", 10.0)))
+    @property
+    def stability_tolerance(self) -> float: return float(self.runtime.get("stability_tolerance", getattr(cc, "STABILITY_TOLERANCE", 2.0)))
     @property
     def anpr_camera_urls(self) -> list[str]: return list(self.runtime.get("anpr_camera_urls", cc.ANPR_CAMERA_URLS))
     @property
@@ -65,4 +58,6 @@ class ConfigManager:
             "serial_baudrate": self.serial_baudrate, "wifi_ssid": self.wifi_ssid,
             "wifi_password": self.wifi_password, "anpr_camera_urls": self.anpr_camera_urls,
             "auxiliary_camera_urls": self.auxiliary_camera_urls,
+            "stability_duration": self.stability_duration,
+            "stability_tolerance": self.stability_tolerance,
         }

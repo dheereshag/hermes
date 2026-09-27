@@ -14,6 +14,12 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
     def setUp(self):
         reset_state()
         reset_auth_state()
+        import sqlite3
+
+        from src.config.store import get_config_db_path
+        with sqlite3.connect(get_config_db_path()) as conn:
+            conn.execute("DELETE FROM runtime_config;")
+        config.load_settings()
         self.app = create_app({"TESTING": True})
         self.client = self.app.test_client()
 
@@ -27,6 +33,11 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.auth_token = res.get_json()["token"]
 
     def tearDown(self):
+        import sqlite3
+
+        from src.config.store import get_config_db_path
+        with sqlite3.connect(get_config_db_path()) as conn:
+            conn.execute("DELETE FROM runtime_config;")
         config.load_settings()
 
     def test_get_index_html(self):
@@ -206,11 +217,15 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
         self.assertNotIn("device_key", data)
         self.assertIn("center_id", data)
         self.assertIn("anpr_camera_urls", data)
+        self.assertIn("stability_duration", data)
+        self.assertIn("stability_tolerance", data)
 
     def test_post_api_config_success(self):
         payload = {
             "serial_port": "/dev/ttyUSB0",
             "serial_baudrate": 9600,
+            "stability_duration": 8.0,
+            "stability_tolerance": 1.5,
             "anpr_camera_url": "http://192.168.1.150/snapshot",
             "auxiliary_camera_urls": ["http://192.168.1.151/snapshot"],
         }
@@ -221,8 +236,10 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertIn(config.weight_threshold, (70.0, 200.0))
+        self.assertIn(config.weight_threshold, (50.0, 70.0, 200.0))
         self.assertEqual(config.serial_port, "/dev/ttyUSB0")
+        self.assertEqual(config.stability_duration, 8.0)
+        self.assertEqual(config.stability_tolerance, 1.5)
         self.assertIn(config.device_id, ("pi1", "pi2"))
         self.assertEqual(config.device_key, "hardware123")
         self.assertIn(config.center_id, (1, 2, 5))
@@ -266,6 +283,25 @@ class TestFlaskDiagnosticsApp(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 400)
+
+    def test_post_api_config_invalid_stability(self):
+        res = self.client.post(
+            "/api/config",
+            data=json.dumps({"stability_duration": 120.0}),
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Stability duration", res.get_json()["error"])
+
+        res2 = self.client.post(
+            "/api/config",
+            data=json.dumps({"stability_tolerance": -5.0}),
+            headers={"Authorization": f"Bearer {self.auth_token}"},
+            content_type="application/json",
+        )
+        self.assertEqual(res2.status_code, 400)
+        self.assertIn("Stability tolerance", res2.get_json()["error"])
 
     def test_404_not_found(self):
         res = self.client.get("/api/unknown_endpoint")

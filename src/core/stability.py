@@ -70,18 +70,20 @@ class ScaleStabilityMachine:
         return False
 
     def _evaluate_stability_window(self, parsed_weight: float, now: float):
-        if abs(parsed_weight - self._current_stable_candidate) <= STABILITY_TOLERANCE:
+        duration = getattr(config, "stability_duration", STABILITY_DURATION)
+        tolerance = getattr(config, "stability_tolerance", STABILITY_TOLERANCE)
+        if abs(parsed_weight - self._current_stable_candidate) <= tolerance:
             elapsed = now - self._candidate_start_time
-            if elapsed >= (STABILITY_DURATION / 2.0) and not self._mid_stability_triggered:
+            if elapsed >= (duration / 2.0) and not self._mid_stability_triggered:
                 self._mid_stability_triggered = True
                 logger.info(
                     f"[Scale Session] Weight steady for {elapsed:.1f}s (halfway). "
                     "Triggering mid-stability fleet capture & pre-compression..."
                 )
                 session_manager.trigger_mid_stability_fleet_capture()
-            if elapsed >= STABILITY_DURATION:
+            if elapsed >= duration:
                 logger.info(
-                    f"[Scale Session] Stable weight confirmed (10s): "
+                    f"[Scale Session] Stable weight confirmed ({duration:.1f}s): "
                     f"{self._current_stable_candidate:.3f} kg. Locking stable weight..."
                 )
                 self.state = ScaleState.SCALE_STABLE_RECORDED

@@ -129,6 +129,7 @@ cd /opt/hermes && ./run.sh
   - *Persistent Wi-Fi Vault*: Remembers all known networks in local SQLite DB for 1-click reconnection without re-entering passwords.
 - **Default Superadmin User**: `superadmin`
 - **Default Superadmin Password**: `Gluvok@241821`
+- **Dynamic Configuration**: Live tuning of Serial Port path, Baud Rate, Stability Duration (1.0–60.0s), Stability Tolerance (0.1–50.0kg), and ANPR / Auxiliary camera URLs with hot-reload directly from the browser.
 
 ---
 

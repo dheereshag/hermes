@@ -24,7 +24,13 @@ class RuntimeConfig:
 
     def update_system(self, **kwargs: Any) -> None:
         with self._lock:
-            for k in ("serial_port", "serial_baudrate", "auxiliary_camera_urls"):
+            for k in (
+                "serial_port",
+                "serial_baudrate",
+                "stability_duration",
+                "stability_tolerance",
+                "auxiliary_camera_urls",
+            ):
                 if kwargs.get(k) is not None:
                     set_override(k, kwargs[k], self.db_path)
             if kwargs.get("anpr_camera_urls") is not None:

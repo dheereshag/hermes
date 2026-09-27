@@ -456,11 +456,13 @@ uv run pytest -v
 ### Why 1200 Baud?
 Most industrial weighbridge indicators (e.g. Avery Weigh-Tronix, Cardinal, Rice Lake) output continuous ASCII weight strings over legacy RS-232 interfaces at 1200 or 2400 baud. 1200 baud offers maximum immunity against electrical noise in harsh industrial environments with long cable runs.
 
-### Why 10-Second Stability Window?
-Trucks pulling onto a weighbridge cause suspension bounce and load cell oscillation. Requiring weight to remain strictly within **±2.0 kg for 10.0 continuous seconds** guarantees that:
+### Why 10-Second Stability Window (Default)?
+Trucks pulling onto a weighbridge cause suspension bounce and load cell oscillation. By default, requiring weight to remain strictly within **±2.0 kg for 10.0 continuous seconds** guarantees that:
 1. The vehicle has fully come to rest.
 2. The driver has not stepped out (or is fully stationary).
 3. Transient motion artifacts do not trigger premature recordings.
+
+*Note:* Both `stability_duration` (seconds) and `stability_tolerance` (kg) can be customized per site via `client_config.py` or the Web UI Settings panel (1.0–60.0s and 0.1–50.0kg) for installations requiring tuned timing.
 
 ### Why 2-Second ANPR Sample Loop?
 Trucks approach the scale slowly. Sampling Camera 1 every 2.0 seconds while the scale is stabilizing yields 4–8 license plate candidates. The consensus voting algorithm (`get_highest_frequency_plate`) selects the winner, eliminating single-frame optical distortions (sun glare, exhaust smoke, headlight reflection).

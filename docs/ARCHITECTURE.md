@@ -48,8 +48,8 @@ graph TD
 
 - **Write-Ahead SQLite Local Durability**: Weighments and camera frames are committed to a local SQLite database (`data/hermes.db`) in WAL mode *before* any upload is attempted, guaranteeing zero data loss during power outages or extended network downtime.
 - **Edge Anti-Duplication & Idempotency**: Sequential single-flight FIFO dispatcher with atomic task leases (`lease_until`) and a **verify-before-retry** protocol for ambiguous read timeouts, preventing duplicate cloud entries when retrying offline weighments.
-- **Weight Scale Serial Parsing**: Reads continuous raw serial stream from UART (`/dev/ttyAMA0` or USB-to-Serial at 1200 Baud 8N1).
-- **Weight Stabilization Detection**: 10-second continuous weight stability tracking (`STABILITY_TOLERANCE = 2.0 kg`, `STABILITY_DURATION = 10s`).
+- **Weight Scale Serial Parsing**: Reads continuous raw serial stream from UART (`/dev/ttyAMA0` or USB-to-Serial, configurable baud rate e.g. 1200 or 9600 Baud 8N1).
+- **Weight Stabilization Detection**: Continuous weight stability tracking with dynamic site configuration (`stability_duration`, default `10.0s`; `stability_tolerance`, default `±2.0 kg`).
 - **Multi-Camera ANPR OCR & Consensus Voting**: Concurrently captures frames from all configured ANPR cameras (Front, Rear, etc.) every 1 second during active weighing and elects the highest-frequency plate candidate.
 - **Synchronized Full-Fleet Camera Snapshots & Pre-Compression**: Captures high-resolution snapshots across all cameras in parallel halfway through the stability window (t=5s) and pre-compresses them to high-clarity JPEG (Q85, max 1920px) in RAM, eliminating finalization delays upon weight stabilization.
 - **Non-Blocking Real-Time Threading**: Scale serial reading is completely decoupled from disk spooling and network I/O; cloud uploads and camera captures are dispatched in dedicated background threads.
@@ -147,7 +147,7 @@ hermes/
   - Assembles the final session package containing stable weight, highest-voted consensus plate, and pre-compressed camera images in `camera_snapshots`.
 - **`ScaleStabilityMachine` (`stability.py`)**:
   - Requires weight to exceed `min_weight` (default `50.0 kg`) to trigger a weighing session.
-  - Implements a continuous 10-second stability check (`STABILITY_TOLERANCE = ±2.0 kg`, `STABILITY_DURATION = 10.0s`).
+  - Implements continuous stability tracking using dynamic configuration (`stability_tolerance`, default `±2.0 kg`; `stability_duration`, default `10.0s`).
   - Once stable, transitions to `SCALE_STABLE_RECORDED` to guarantee strictly one upload per truck session.
   - Resets to `SCALE_IDLE` only when weight drops back to `<= 0.0 kg`.
 - **`Telemetry Store` (`telemetry.py`)**:
@@ -345,6 +345,8 @@ Hermes uses a dual-layer configuration pattern:
 | `anpr_server_url` | `client_config.py` | ❌ No (Hardcoded) | Local Argus ANPR microservice endpoint (`http://127.0.0.1:8000/recognize`). |
 | `serial_port` | Baseline / SQLite | ✅ Yes (`/config`) | UART serial port connected to weigh scale (e.g. `/dev/ttyUSB0`). |
 | `serial_baudrate` | Baseline / SQLite | ✅ Yes (`/config`) | Baud rate for serial communication (typically `1200`, `9600`). |
+| `stability_duration` | Baseline / SQLite | ✅ Yes (`/config`) | Continuous steady duration in seconds to confirm stable weight (default: `10.0`). |
+| `stability_tolerance` | Baseline / SQLite | ✅ Yes (`/config`) | Allowable weight oscillation range in kg during stabilization (default: `2.0`). |
 | `anpr_camera_urls` | Baseline / SQLite | ✅ Yes (`/config`) | Snapshot URLs of License Plate Cameras (Front, Rear). |
 | `auxiliary_camera_urls` | Baseline / SQLite | ✅ Yes (`/config`) | Snapshot URLs of overview context cameras (2..N). |
 | `wifi_ssid` | Baseline / SQLite | ✅ Yes (`/wifi`) | Facility Wi-Fi SSID. |

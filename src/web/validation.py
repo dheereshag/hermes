@@ -38,6 +38,22 @@ def _validate_cameras(urls: Any) -> tuple[bool, str | None]:
     return True, None
 
 
+def _validate_stability(duration: Any, tolerance: Any) -> tuple[bool, str | None]:
+    if duration is not None:
+        try:
+            if not (1.0 <= float(duration) <= 60.0):
+                return False, "Stability duration must be between 1.0 and 60.0 seconds."
+        except (ValueError, TypeError):
+            return False, "Invalid stability duration value."
+    if tolerance is not None:
+        try:
+            if not (0.1 <= float(tolerance) <= 50.0):
+                return False, "Stability tolerance must be between 0.1 and 50.0 kg."
+        except (ValueError, TypeError):
+            return False, "Invalid stability tolerance value."
+    return True, None
+
+
 def validate_config_payload(data: dict[str, Any]) -> tuple[bool, str | None]:
     for key in IMMUTABLE_FIELDS:
         if key in data:
@@ -45,6 +61,9 @@ def validate_config_payload(data: dict[str, Any]) -> tuple[bool, str | None]:
     ok_serial, err_serial = _validate_serial(data.get("serial_port"), data.get("serial_baudrate"))
     if not ok_serial:
         return False, err_serial
+    ok_stab, err_stab = _validate_stability(data.get("stability_duration"), data.get("stability_tolerance"))
+    if not ok_stab:
+        return False, err_stab
     for cam_field in ("anpr_camera_urls", "auxiliary_camera_urls"):
         ok_cam, err_cam = _validate_cameras(data.get(cam_field))
         if not ok_cam:
