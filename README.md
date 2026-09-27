@@ -121,21 +121,6 @@ cd /opt/hermes && ./run.sh
 
 ---
 
-#### Manual / Offline Deployment (Air-Gapped)
-If deploying without network access, compile and install directly on the Pi:
-```bash
-# 1. On Pi: compile and install directly to /opt/hermes
-uv run python scripts/package.py --install /opt/hermes
-
-# 2. Place client license
-cp client.lic /opt/hermes/data/client.lic
-
-# 3. Start Hermes
-cd /opt/hermes && ./run.sh
-```
-
----
-
 ## 🖥️ Web Diagnostics Dashboard
 
 - **URL**: `http://localhost:8080` (or `http://<pi-ip>:8080`)
