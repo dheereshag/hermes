@@ -189,6 +189,31 @@ class TestWiFiManager(unittest.TestCase):
         self.assertIn("Successfully connected", msg)
         mock_nmcli.assert_any_call(["connection", "up", "id", "Office_5G"], timeout=20, check=False)
 
+    @patch("src.devices.wifi.led_controller.set_network_status")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_connect_to_wifi_sets_led_network_status(self, mock_run, mock_nmcli, mock_led):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_run.return_value = mock_res
+
+        success, _ = connect_to_wifi("Office_5G", "pwd")
+        self.assertTrue(success)
+        mock_led.assert_called_with(True)
+
+    @patch("src.devices.wifi.led_controller.set_network_status")
+    @patch("src.devices.wifi.is_nmcli_available", return_value=True)
+    @patch("src.devices.wifi.subprocess.run")
+    def test_connect_to_wifi_failure_sets_led_network_status_false(self, mock_run, mock_nmcli, mock_led):
+        mock_res = MagicMock()
+        mock_res.returncode = 1
+        mock_res.stderr = "Failed"
+        mock_run.return_value = mock_res
+
+        success, _ = connect_to_wifi("Office_5G", "wrong")
+        self.assertFalse(success)
+        mock_led.assert_called_with(False)
+
 
 if __name__ == "__main__":
     unittest.main()

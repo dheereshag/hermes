@@ -167,6 +167,13 @@ hermes/
 - **`WiFi Manager` (`wifi.py`)**:
   - Continuously monitors active Wi-Fi connection via `nmcli`.
   - Automatically spins up an emergency Wi-Fi Access Point (`hermes` / `12345678`) on the wireless interface if connection to the facility router is lost, allowing on-site technicians to connect directly.
+  - Synchronizes online / offline status with the RGB LED state machine.
+- **`RGB LED Controller` (`src/devices/led/`)**:
+  - Hardware driver (`python-periphery` GPIO) and state machine coordinating visual status signals on GPIO 17 (Red), GPIO 27 (Green), and GPIO 22 (Blue).
+  - 🟢 **Green**: Standby idle at 0.0 kg and connected to Wi-Fi/Internet.
+  - 🟡 **Yellow / Amber**: Standby idle at 0.0 kg, but offline / emergency hotspot active.
+  - 🔴 **Red**: Active weighment session in progress on the platform (persists even if offline).
+  - 🔵 **Blue**: 10-second transient pulse on verified cloud upload success.
 
 ### 5.3 External Integrations (`src/integrations/`)
 - **`Argus ANPR Client` (`anpr.py`)**:

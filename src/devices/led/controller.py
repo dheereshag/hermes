@@ -13,12 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class RGBLedController:
-    """Orchestrates LED states: Green (Idle), Red (Active), Blue (Success)."""
+    """Orchestrates LED states: Green (Online), Yellow (Offline), Red (Active), Blue (Success)."""
 
     def __init__(self, driver: LEDHardwareDriver | None = None) -> None:
         self.driver = driver or LEDHardwareDriver()
         self._current_color = LEDColor.OFF
         self._is_active_session = False
+        self._is_online = True
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
 
@@ -26,13 +27,20 @@ class RGBLedController:
     def current_color(self) -> LEDColor:
         return self._current_color
 
+    @property
+    def is_online(self) -> bool:
+        return self._is_online
+
+    def _get_idle_color(self) -> LEDColor:
+        return LEDColor.GREEN if self._is_online else LEDColor.YELLOW
+
     def _apply_color(self, color: LEDColor) -> None:
         self._current_color = color
         self.driver.set_rgb(*color.value)
         logger.info(f"[LED] State changed to {color.name}")
 
     def startup_test(self, delay: float = 1.0) -> None:
-        """Cycles Green -> Red -> Blue (delay seconds each), then resets to idle Green."""
+        """Cycles Green -> Red -> Blue (delay seconds each), then resets to idle."""
         logger.info(f"[LED] Starting hardware sequence: Green -> Red -> Blue ({delay}s each)...")
         for color in (LEDColor.GREEN, LEDColor.RED, LEDColor.BLUE):
             with self._lock:
@@ -41,11 +49,18 @@ class RGBLedController:
         self.set_idle()
 
     def set_idle(self) -> None:
-        """Sets LED to Green when scale returns to zero."""
+        """Sets LED to Green (if online) or Yellow (if offline) when scale returns to zero."""
         with self._lock:
             self._is_active_session = False
             if self._timer is None:
-                self._apply_color(LEDColor.GREEN)
+                self._apply_color(self._get_idle_color())
+
+    def set_network_status(self, is_online: bool) -> None:
+        """Updates network status and applies idle color if scale is standby."""
+        with self._lock:
+            self._is_online = is_online
+            if not self._is_active_session and self._timer is None:
+                self._apply_color(self._get_idle_color())
 
     def set_active(self) -> None:
         """Sets LED to Red when weight first encountered on scale."""
@@ -71,7 +86,7 @@ class RGBLedController:
         with self._lock:
             self._timer = None
             self._is_active_session = False
-            self._apply_color(LEDColor.GREEN)
+            self._apply_color(self._get_idle_color())
 
     def cleanup(self) -> None:
         """Cancels timers and turns off LED."""

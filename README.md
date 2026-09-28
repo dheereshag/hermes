@@ -133,4 +133,18 @@ cd /opt/hermes && ./run.sh
 
 ---
 
+## 💡 Hardware RGB LED Status Indicators
+
+Hermes provides real-time operational feedback via an RGB LED (GPIO 17 Red, GPIO 27 Green, GPIO 22 Blue):
+
+| Color | State | Description |
+| :--- | :--- | :--- |
+| 🟢 **Green** | **Idle & Online** | Scale standby at 0.0 kg; connected to Wi-Fi/Internet and ready for next vehicle. |
+| 🟡 **Yellow / Amber** | **Idle & Offline** | Scale standby at 0.0 kg; **not connected to internet / emergency hotspot active**. |
+| 🔴 **Red** | **Active Weighment** | Vehicle on platform (weight > threshold); weighment & ANPR capture in progress (persists even if offline). |
+| 🔵 **Blue** | **Cloud Success** | 10-second transient pulse confirming upload to Gluvok Cloud, then reverts to Green (online) or Yellow (offline). |
+| ⚫ **Off** | **Shutdown** | Daemon stopped / cleanup complete. |
+
+---
+
 > For detailed hardware topologies, sequence flows, and system architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

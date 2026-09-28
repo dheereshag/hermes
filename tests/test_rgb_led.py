@@ -22,6 +22,8 @@ class TestLEDHardwareDriver(unittest.TestCase):
         self.assertEqual(driver.current_values, (0, 1, 0))
         driver.set_rgb(0, 0, 1)
         self.assertEqual(driver.current_values, (0, 0, 1))
+        driver.set_rgb(1, 1, 0)
+        self.assertEqual(driver.current_values, (1, 1, 0))
         driver.close()
         self.assertEqual(len(driver.pins), 0)
 
@@ -95,6 +97,40 @@ class TestRGBLedController(unittest.TestCase):
         time.sleep(0.12)
         # Should now resolve to Green
         self.assertEqual(self.controller.current_color, LEDColor.GREEN)
+
+    def test_set_network_status_offline_sets_yellow(self):
+        self.controller.set_idle()
+        self.controller.set_network_status(False)
+        self.assertFalse(self.controller.is_online)
+        self.assertEqual(self.controller.current_color, LEDColor.YELLOW)
+        self.mock_driver.set_rgb.assert_called_with(1, 1, 0)
+
+    def test_set_network_status_online_sets_green(self):
+        self.controller.set_network_status(False)
+        self.assertEqual(self.controller.current_color, LEDColor.YELLOW)
+        self.controller.set_network_status(True)
+        self.assertTrue(self.controller.is_online)
+        self.assertEqual(self.controller.current_color, LEDColor.GREEN)
+        self.mock_driver.set_rgb.assert_called_with(0, 1, 0)
+
+    def test_active_session_reverts_to_yellow_when_offline(self):
+        self.controller.set_network_status(False)
+        self.controller.set_active()
+        self.assertEqual(self.controller.current_color, LEDColor.RED)
+        self.mock_driver.set_rgb.assert_called_with(1, 0, 0)
+
+        self.controller.set_idle()
+        self.assertEqual(self.controller.current_color, LEDColor.YELLOW)
+        self.mock_driver.set_rgb.assert_called_with(1, 1, 0)
+
+    def test_cloud_success_reverts_to_yellow_when_offline(self):
+        self.controller.set_network_status(False)
+        self.controller.trigger_cloud_success(duration=0.05)
+        self.assertEqual(self.controller.current_color, LEDColor.BLUE)
+
+        time.sleep(0.1)
+        self.assertEqual(self.controller.current_color, LEDColor.YELLOW)
+        self.mock_driver.set_rgb.assert_called_with(1, 1, 0)
 
 
 class TestStabilityLedIntegration(unittest.TestCase):

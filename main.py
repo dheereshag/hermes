@@ -36,6 +36,7 @@ from src.core import (
 )
 from src.devices import (
     get_uart_reader,
+    is_wifi_connected,
     led_controller,
     log_camera_fleet,
     start_wifi_watchdog,
@@ -69,8 +70,9 @@ def setup():
     logger.info("Gluvok Weighment & ANPR System Starting...")
     logger.info("==============================================")
 
-    # Initialize RGB LED indicator: Green (1s) -> Red (1s) -> Blue (1s) -> Idle Green
+    # Initialize RGB LED indicator: Green (1s) -> Red (1s) -> Blue (1s) -> Idle
     led_controller.startup_test(delay=1.0)
+    led_controller.set_network_status(is_wifi_connected())
 
     # Start UART scale reader thread
     get_uart_reader().start()

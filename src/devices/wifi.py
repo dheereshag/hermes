@@ -19,6 +19,7 @@ from src.config.constants import (
     DEFAULT_WIFI_WATCHDOG_INTERVAL,
     HOTSPOT_CON_NAME,
 )
+from src.devices.led import led_controller
 
 logger = logging.getLogger(__name__)
 
@@ -190,16 +191,19 @@ def start_emergency_hotspot(
     with _wifi_lock:
         if is_hotspot_active():
             _hotspot_active = True
+            led_controller.set_network_status(False)
             return True
 
         if not is_nmcli_available():
             logger.info("[WiFi] nmcli not available. Simulating hotspot start in current environment.")
             _hotspot_active = True
+            led_controller.set_network_status(False)
             return True
 
         try:
             _activate_hotspot_connection(ssid, password)
             _hotspot_active = True
+            led_controller.set_network_status(False)
             logger.info(
                 f"[WiFi] Emergency Access Point active! SSID: '{ssid}' | "
                 f"Password: '{password}' | Web Console: http://10.42.0.1:8080"
@@ -220,15 +224,18 @@ def stop_emergency_hotspot() -> bool:
     with _wifi_lock:
         if not is_hotspot_active():
             _hotspot_active = False
+            led_controller.set_network_status(is_wifi_connected())
             return True
 
         if not is_nmcli_available():
             _hotspot_active = False
+            led_controller.set_network_status(is_wifi_connected())
             return True
 
         try:
             _run_nmcli(["connection", "down", HOTSPOT_CON_NAME], timeout=5, check=False)
             _hotspot_active = False
+            led_controller.set_network_status(is_wifi_connected())
             logger.info("[WiFi] Emergency Access Point stopped.")
             return True
         except (subprocess.SubprocessError, OSError) as e:
@@ -298,12 +305,14 @@ def connect_to_wifi(ssid: str, password: str) -> tuple[bool, str]:
         if res.returncode == 0:
             logger.info(f"[WiFi] Successfully connected to Wi-Fi: '{ssid}'!")
             stop_emergency_hotspot()
+            led_controller.set_network_status(True)
             return True, f"Successfully connected to Wi-Fi: '{ssid}'."
         else:
             err_msg = res.stderr.strip() or res.stdout.strip() or "Connection failed"
             logger.warning(f"[WiFi] Failed to connect to '{ssid}': {err_msg}")
             # Re-engage emergency hotspot so technician does not lose connection
             start_emergency_hotspot()
+            led_controller.set_network_status(False)
             return False, f"Failed to connect to '{ssid}': {err_msg}"
     except (subprocess.SubprocessError, OSError) as e:
         logger.error(f"[WiFi] Subprocess error connecting to '{ssid}': {e}")
@@ -315,7 +324,9 @@ def _watchdog_loop(interval: float):
     """Monitors Wi-Fi connection and triggers emergency hotspot if disconnected."""
     logger.info(f"[WiFi Watchdog] Started network monitoring (check interval: {interval}s).")
     while not _watchdog_stop_event.is_set():
-        if not is_wifi_connected():
+        wifi_up = is_wifi_connected()
+        led_controller.set_network_status(wifi_up)
+        if not wifi_up:
             if not is_hotspot_active():
                 logger.warning("[WiFi Watchdog] No active Wi-Fi connection detected! Starting emergency hotspot...")
                 start_emergency_hotspot()
